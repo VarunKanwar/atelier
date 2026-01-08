@@ -1,0 +1,59 @@
+{
+  "name": "atelier",
+  "version": "0.1.0",
+  "description": "A task runtime for browser workloads with parallelism, backpressure, and cancellation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "examples": "vite examples/observability-demo"
+  },
+  "keywords": [
+    "worker",
+    "web-worker",
+    "task",
+    "parallelism",
+    "concurrency",
+    "backpressure",
+    "cancellation",
+    "queue"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "dependencies": {
+    "comlink": "^4.4.2"
+  },
+  "devDependencies": {
+    "@chakra-ui/react": "^3.30.0",
+    "@emotion/react": "^11.14.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^6.3.5",
+    "vitest": "^4.0.16",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {},
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
