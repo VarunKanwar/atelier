@@ -3,7 +3,9 @@
     "allow": [
       "mcp__linear-server__list_projects",
       "mcp__linear-server__list_issues",
-      "Bash(bun test:*)"
+      "Bash(bun test:*)",
+      "mcp__linear-server__list_teams",
+      "mcp__linear-server__create_issue"
     ]
   }
 }
