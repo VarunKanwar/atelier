@@ -4,23 +4,12 @@ vi.mock('comlink', () => ({
   wrap: (worker: unknown) => worker,
 }))
 
-import { SingletonWorker } from '../core/singleton-worker'
-import { WorkerPool } from '../core/worker-pool'
-import { WorkerCrashedError } from '../core/worker-crash-error'
-import type { TaskEvent } from '../core/types'
-import { FakeWorker, type DispatchHandler } from './helpers/fake-worker'
-
-const deferred = <T>() => {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
-const flush = () => Promise.resolve()
+import { SingletonWorker } from '../../core/singleton-worker'
+import { WorkerPool } from '../../core/worker-pool'
+import { WorkerCrashedError } from '../../core/worker-crash-error'
+import type { TaskEvent } from '../../core/types'
+import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
+import { deferred, tick as flush } from '../helpers/deferred'
 
 const makeWorkerFactory = (dispatches: DispatchHandler[]) => {
   const created: FakeWorker[] = []
