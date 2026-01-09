@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAbortTaskController } from '../core/abort-task-controller'
+import { createAbortTaskController } from '../../core/abort-task-controller'
 
 describe('AbortTaskController', () => {
   it('aborts and clears per key', () => {
