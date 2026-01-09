@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__linear-server__list_projects",
+      "mcp__linear-server__list_issues",
+      "Bash(bun test:*)"
+    ]
+  }
+}
