@@ -130,7 +130,7 @@ describe('parallelLimit', () => {
 
     it('includes error for rejected results', async () => {
       const items = [1]
-      const results = []
+      const results: Array<{ status: string; error?: unknown; value?: unknown }> = []
       const error = new Error('test error')
 
       for await (const result of parallelLimit(items, 1, async () => {
@@ -141,7 +141,9 @@ describe('parallelLimit', () => {
 
       expect(results).toHaveLength(1)
       expect(results[0].status).toBe('rejected')
-      expect(results[0].error).toBe(error)
+      if (results[0].status === 'rejected') {
+        expect(results[0].error).toBe(error)
+      }
     })
   })
 
@@ -267,7 +269,7 @@ describe('yieldAsCompleted', () => {
   })
 
   it('handles empty array', async () => {
-    const results: string[] = []
+    const results: unknown[] = []
 
     for await (const value of yieldAsCompleted([])) {
       results.push(value)
