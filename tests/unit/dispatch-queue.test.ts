@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DispatchQueue } from '../../core/dispatch-queue'
+import { DispatchQueue } from '../../src/dispatch-queue'
 import { deferred, tick } from '../helpers/deferred'
 
 type Payload = { id: string }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTaskWorker, type TaskContext } from '../../core/task-worker'
+import { createTaskWorker, type TaskContext } from '../../src/task-worker'
 
 const waitForAbort = (signal: AbortSignal): Promise<void> =>
   new Promise(resolve => {

@@ -10,7 +10,7 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { useMemo } from 'react'
-import type { RuntimeTaskSnapshot, TaskRuntime } from '../../core'
+import type { RuntimeTaskSnapshot, TaskRuntime } from '../../src'
 import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 
 export type RuntimeObservabilityPanelProps = {

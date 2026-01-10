@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createAbortTaskController } from '../../core/abort-task-controller'
-import { parallelLimit, yieldAsCompleted } from '../../core/parallel-limit'
+import { createAbortTaskController } from '../../src/abort-task-controller'
+import { parallelLimit, yieldAsCompleted } from '../../src/parallel-limit'
 import { deferred } from '../helpers/deferred'
 
 describe('parallelLimit', () => {

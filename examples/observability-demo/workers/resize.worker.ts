@@ -4,11 +4,7 @@
  */
 
 import { expose } from 'comlink'
-import {
-  createTaskWorker,
-  type StripTaskContext,
-  type TaskContext,
-} from '../../../core/task-worker'
+import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../src/task-worker'
 
 export interface ImageData {
   name: string

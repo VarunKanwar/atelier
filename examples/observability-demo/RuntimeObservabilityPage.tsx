@@ -12,7 +12,7 @@ import {
 } from '@chakra-ui/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { createTaskRuntime, parallelLimit, type TaskRuntime } from '../../core'
+import { createTaskRuntime, parallelLimit, type TaskRuntime } from '../../src'
 import RuntimeObservabilityPanel from './RuntimeObservabilityPanel'
 import type { AnalyzeAPI } from './workers/analyze.worker'
 import type { EnhanceAPI } from './workers/enhance.worker'
