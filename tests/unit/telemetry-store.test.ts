@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createTelemetryStore } from '../../core/telemetry'
-import type { TaskEvent } from '../../core/types'
+import { createTelemetryStore } from '../../src/telemetry'
+import type { TaskEvent } from '../../src/types'
 
 const makeEvent = (
   overrides: Partial<TaskEvent> & { taskId: string; type: TaskEvent['type'] }

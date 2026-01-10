@@ -4,7 +4,7 @@ vi.mock('comlink', () => ({
   wrap: (worker: unknown) => worker,
 }))
 
-import { createTaskRuntime } from '../../core/runtime'
+import { createTaskRuntime } from '../../src/runtime'
 import { deferred, tick } from '../helpers/deferred'
 import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 

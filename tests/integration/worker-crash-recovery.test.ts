@@ -4,10 +4,10 @@ vi.mock('comlink', () => ({
   wrap: (worker: unknown) => worker,
 }))
 
-import { SingletonWorker } from '../../core/singleton-worker'
-import type { TaskEvent } from '../../core/types'
-import { WorkerCrashedError } from '../../core/worker-crash-error'
-import { WorkerPool } from '../../core/worker-pool'
+import { SingletonWorker } from '../../src/singleton-worker'
+import type { TaskEvent } from '../../src/types'
+import { WorkerCrashedError } from '../../src/worker-crash-error'
+import { WorkerPool } from '../../src/worker-pool'
 import { deferred, tick as flush } from '../helpers/deferred'
 import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 

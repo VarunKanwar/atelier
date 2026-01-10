@@ -4,11 +4,7 @@
  */
 
 import { expose } from 'comlink'
-import {
-  createTaskWorker,
-  type StripTaskContext,
-  type TaskContext,
-} from '../../../core/task-worker'
+import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../src/task-worker'
 import type { ResizedImage } from './resize.worker'
 
 export interface AnalysisResult extends ResizedImage {
