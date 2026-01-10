@@ -8,9 +8,6 @@
 Atelier is a small task runtime for browser workloads that need parallelism,
 backpressure, and cancellation without a pipeline DSL.
 
-It is intentionally opinionated and internal-first: we optimize for clarity and
-correctness over backward compatibility.
-
 ## What it provides
 
 - Task-based API with `async/await` calls
