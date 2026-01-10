@@ -64,7 +64,7 @@ Worker:
 
 ```ts
 import { expose } from 'comlink'
-import { createTaskWorker, type TaskContext, type StripTaskContext } from 'atelier'
+import { createTaskWorker, type TaskContext, type StripTaskContext } from '@varunkanwar/atelier'
 
 const handlers = {
   async process(image: ImageData, ctx: TaskContext) {
@@ -96,7 +96,7 @@ const snapshot = runtime.getRuntimeSnapshot()
 For latency and queue wait percentiles, attach a telemetry store:
 
 ```ts
-import { createTelemetryStore } from 'atelier'
+import { createTelemetryStore } from '@varunkanwar/atelier'
 
 const telemetry = createTelemetryStore()
 const task = runtime.defineTask({
@@ -122,7 +122,6 @@ const task = runtime.defineTask({
 
 - [Design](./docs/design.md) - Architecture and design decisions
 - [API Reference](./docs/api-reference.md) - Complete API documentation
-- [Worker Crash Recovery](./docs/worker-crash-recovery.md) - Crash handling details
 - [Testing](./docs/testing.md) - Testing patterns
 
 ## Development

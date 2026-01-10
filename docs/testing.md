@@ -1,10 +1,10 @@
 # Atelier Testing
 
-This repo uses Vitest for Atelier tests. Tests live under `tests/atelier/`.
+This repo uses Vitest for Atelier tests. Tests live under `tests/`.
 
 ## Worker harness
 
-Crash-recovery tests use a minimal `FakeWorker` shim (`tests/atelier/helpers/fake-worker.ts`).
+Crash-recovery tests use a minimal `FakeWorker` shim (`tests/helpers/fake-worker.ts`).
 It emulates the parts of the Worker interface that the runtime relies on:
 
 - `addEventListener` / `removeEventListener`
