@@ -2,7 +2,7 @@ export type DispatchHandler = (
   callId: string,
   method: string,
   args: unknown[],
-  key?: string,
+  key?: string
 ) => Promise<unknown>
 
 export class FakeWorker {

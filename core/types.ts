@@ -10,8 +10,9 @@ export interface TaskConfig {
   type: TaskType
   worker: () => Worker
   init?: InitMode
-  poolSize?: number  // Only for parallel tasks
+  poolSize?: number // Only for parallel tasks
   // Optional key derivation for cancellation scoping.
+  // biome-ignore lint/suspicious/noExplicitAny: keyOf accepts arbitrary task method arguments
   keyOf?: (...args: any[]) => string
   // Optional per-call timeout (ms) that aborts the dispatch.
   timeoutMs?: number
@@ -73,6 +74,7 @@ export interface WorkerState {
 }
 
 export interface TaskExecutor {
+  // biome-ignore lint/suspicious/noExplicitAny: Generic task dispatch returns arbitrary worker method results
   dispatch(method: string, args: unknown[], options?: TaskDispatchOptions): Promise<any>
   getState(): WorkerState
   startWorkers(): void

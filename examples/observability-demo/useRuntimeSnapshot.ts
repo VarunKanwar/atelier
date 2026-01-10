@@ -8,14 +8,9 @@ export type UseRuntimeSnapshotOptions = RuntimeSnapshotSubscriptionOptions & {
 
 export const useRuntimeSnapshot = (
   runtime: TaskRuntime,
-  options: UseRuntimeSnapshotOptions = {},
+  options: UseRuntimeSnapshotOptions = {}
 ): { snapshot: RuntimeSnapshot; updatedAt: number } => {
-  const {
-    enabled = true,
-    intervalMs = 250,
-    emitImmediately = true,
-    onlyOnChange = true,
-  } = options
+  const { enabled = true, intervalMs = 250, emitImmediately = true, onlyOnChange = true } = options
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>(() => runtime.getRuntimeSnapshot())
   const [updatedAt, setUpdatedAt] = useState(() => Date.now())
   const subscriptionOptions = useMemo(
@@ -24,7 +19,7 @@ export const useRuntimeSnapshot = (
       emitImmediately,
       onlyOnChange,
     }),
-    [emitImmediately, intervalMs, onlyOnChange],
+    [emitImmediately, intervalMs, onlyOnChange]
   )
 
   useEffect(() => {

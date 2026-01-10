@@ -1,7 +1,6 @@
-import type { InitMode, TaskExecutor, TaskType, WorkerState } from './types'
-import { createAbortTaskController, type AbortTaskController } from './abort-task-controller'
+import { type AbortTaskController, createAbortTaskController } from './abort-task-controller'
 import { createDefineTask, type Task } from './define-task'
-import type { TaskConfig } from './types'
+import type { InitMode, TaskConfig, TaskExecutor, TaskType, WorkerState } from './types'
 
 export type RuntimeTaskSnapshot = WorkerState & {
   taskId: string
@@ -20,12 +19,13 @@ export type RuntimeSnapshotSubscriptionOptions = {
 }
 
 export type TaskRuntime = {
+  // biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped task definitions
   defineTask: <T = any>(config: TaskConfig) => Task<T>
   abortTaskController: AbortTaskController
   getRuntimeSnapshot: () => RuntimeSnapshot
   subscribeRuntimeSnapshot: (
     listener: (snapshot: RuntimeSnapshot) => void,
-    options?: RuntimeSnapshotSubscriptionOptions,
+    options?: RuntimeSnapshotSubscriptionOptions
   ) => () => void
 }
 
@@ -69,7 +69,7 @@ const createRegistry = () => {
 
   const subscribeRuntimeSnapshot = (
     listener: (snapshot: RuntimeSnapshot) => void,
-    options: RuntimeSnapshotSubscriptionOptions = {},
+    options: RuntimeSnapshotSubscriptionOptions = {}
   ): (() => void) => {
     const intervalMs = options.intervalMs ?? 250
     const emitImmediately = options.emitImmediately ?? true

@@ -5,8 +5,8 @@ vi.mock('comlink', () => ({
 }))
 
 import { createTaskRuntime } from '../../core/runtime'
-import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
-import { deferred, tick } from '../helpers/deferred'
+import { tick } from '../helpers/deferred'
+import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 
 type TestAPI = {
   work: () => Promise<string>
@@ -34,9 +34,7 @@ describe('Worker Lifecycle', () => {
   describe('init modes', () => {
     it('lazy: does not create workers until first dispatch', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'result',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -55,9 +53,7 @@ describe('Worker Lifecycle', () => {
 
     it('eager: creates workers immediately on defineTask', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'result',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -115,9 +111,7 @@ describe('Worker Lifecycle', () => {
 
     it('startWorkers on lazy task resumes queue but does not create workers', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'result',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -138,9 +132,7 @@ describe('Worker Lifecycle', () => {
 
     it('stopWorkers terminates workers', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'result',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -176,7 +168,7 @@ describe('Worker Lifecycle', () => {
 
       task.stopWorkers()
 
-      expect(created.every((w) => w.terminated)).toBe(true)
+      expect(created.every(w => w.terminated)).toBe(true)
       expect(task.getState().workerStatus).toBe('stopped')
     })
   })
@@ -265,9 +257,7 @@ describe('Worker Lifecycle', () => {
   describe('dispose', () => {
     it('terminates workers on dispose', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'result',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -285,10 +275,7 @@ describe('Worker Lifecycle', () => {
 
     it('dispose parallel pool terminates all workers', async () => {
       const runtime = createTaskRuntime()
-      const { createWorker, created } = makeWorkerFactory([
-        async () => 'a',
-        async () => 'b',
-      ])
+      const { createWorker, created } = makeWorkerFactory([async () => 'a', async () => 'b'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'parallel',
@@ -301,7 +288,7 @@ describe('Worker Lifecycle', () => {
 
       task.dispose()
 
-      expect(created.every((w) => w.terminated)).toBe(true)
+      expect(created.every(w => w.terminated)).toBe(true)
     })
 
     it('cannot startWorkers after dispose', async () => {

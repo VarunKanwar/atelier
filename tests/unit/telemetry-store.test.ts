@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createTelemetryStore } from '../../core/telemetry'
 import type { TaskEvent } from '../../core/types'
 
-const makeEvent = (overrides: Partial<TaskEvent> & { taskId: string; type: TaskEvent['type'] }): TaskEvent => ({
+const makeEvent = (
+  overrides: Partial<TaskEvent> & { taskId: string; type: TaskEvent['type'] }
+): TaskEvent => ({
   ts: Date.now(),
   ...overrides,
 })
@@ -257,7 +259,9 @@ describe('TelemetryStore', () => {
       const error = new Error('worker died')
 
       store.emit(makeEvent({ taskId: 'task-1', type: 'worker:spawn', workerIndex: 0 }))
-      store.emit(makeEvent({ taskId: 'task-1', type: 'worker:crash', workerIndex: 0, error, ts: 12345 }))
+      store.emit(
+        makeEvent({ taskId: 'task-1', type: 'worker:crash', workerIndex: 0, error, ts: 12345 })
+      )
 
       const state = store.getState()
       expect(state.tasks['task-1'].activeWorkers).toBe(0)

@@ -5,8 +5,8 @@ vi.mock('comlink', () => ({
 }))
 
 import { createTaskRuntime } from '../../core/runtime'
-import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
 import { deferred, tick } from '../helpers/deferred'
+import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 
 type TestAPI = {
   echo: (value: string) => Promise<string>
@@ -74,7 +74,7 @@ describe('Task Runtime', () => {
     it('dispatches multiple calls to parallel pool', async () => {
       const runtime = createTaskRuntime()
       const gates = [deferred<string>(), deferred<string>()]
-      let callCount = 0
+      const _callCount = 0
 
       const { createWorker } = makeWorkerFactory([
         async () => gates[0].promise,
@@ -106,14 +106,12 @@ describe('Task Runtime', () => {
       const runtime = createTaskRuntime()
       const gate = deferred<string>()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => gate.promise,
-      ])
+      const { createWorker } = makeWorkerFactory([async () => gate.promise])
 
       const task = runtime.defineTask<{ process: (docId: string) => Promise<string> }>({
         type: 'singleton',
         worker: createWorker,
-        keyOf: (docId) => docId,
+        keyOf: docId => docId,
       })
 
       const promise = task.process('doc-1')
@@ -139,7 +137,7 @@ describe('Task Runtime', () => {
         type: 'parallel',
         poolSize: 2,
         worker: createWorker,
-        keyOf: (docId) => docId,
+        keyOf: docId => docId,
       })
 
       const first = task.process('doc-1')
@@ -162,29 +160,25 @@ describe('Task Runtime', () => {
       const gate1 = deferred<string>()
       const gate2 = deferred<string>()
 
-      const { createWorker: createWorker1 } = makeWorkerFactory([
-        async () => gate1.promise,
-      ])
-      const { createWorker: createWorker2 } = makeWorkerFactory([
-        async () => gate2.promise,
-      ])
+      const { createWorker: createWorker1 } = makeWorkerFactory([async () => gate1.promise])
+      const { createWorker: createWorker2 } = makeWorkerFactory([async () => gate2.promise])
 
       const task1 = runtime.defineTask<{ process: (id: string) => Promise<string> }>({
         type: 'singleton',
         worker: createWorker1,
-        keyOf: (id) => id,
+        keyOf: id => id,
       })
 
       const task2 = runtime.defineTask<{ process: (id: string) => Promise<string> }>({
         type: 'singleton',
         worker: createWorker2,
-        keyOf: (id) => id,
+        keyOf: id => id,
       })
 
       // Start both calls and capture their rejections
-      const promise1 = task1.process('shared-key').catch((e) => e)
+      const promise1 = task1.process('shared-key').catch(e => e)
       await tick()
-      const promise2 = task2.process('shared-key').catch((e) => e)
+      const promise2 = task2.process('shared-key').catch(e => e)
       await tick()
 
       runtime.abortTaskController.abort('shared-key')
@@ -204,9 +198,7 @@ describe('Task Runtime', () => {
       const runtime = createTaskRuntime()
       const gate = deferred<string>()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => gate.promise,
-      ])
+      const { createWorker } = makeWorkerFactory([async () => gate.promise])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -234,9 +226,7 @@ describe('Task Runtime', () => {
       vi.useFakeTimers()
       const runtime = createTaskRuntime()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => 'quick-result',
-      ])
+      const { createWorker } = makeWorkerFactory([async () => 'quick-result'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -257,9 +247,7 @@ describe('Task Runtime', () => {
       const runtime = createTaskRuntime()
       const gate = deferred<string>()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => gate.promise,
-      ])
+      const { createWorker } = makeWorkerFactory([async () => gate.promise])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -292,9 +280,7 @@ describe('Task Runtime', () => {
       const runtime = createTaskRuntime()
       const gate = deferred<string>()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => gate.promise,
-      ])
+      const { createWorker } = makeWorkerFactory([async () => gate.promise])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -313,9 +299,7 @@ describe('Task Runtime', () => {
     it('rejects new calls after dispose', async () => {
       const runtime = createTaskRuntime()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => 'ok',
-      ])
+      const { createWorker } = makeWorkerFactory([async () => 'ok'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',
@@ -330,9 +314,7 @@ describe('Task Runtime', () => {
     it('removes task from runtime snapshot after dispose', async () => {
       const runtime = createTaskRuntime()
 
-      const { createWorker } = makeWorkerFactory([
-        async () => 'ok',
-      ])
+      const { createWorker } = makeWorkerFactory([async () => 'ok'])
 
       const task = runtime.defineTask<TestAPI>({
         type: 'singleton',

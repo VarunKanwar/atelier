@@ -7,10 +7,11 @@ type Payload = { id: string }
 describe('DispatchQueue', () => {
   describe('basic dispatch', () => {
     it('dispatches and returns result', async () => {
-      const queue = new DispatchQueue<Payload>(
-        async (payload) => `result-${payload.id}`,
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async payload => `result-${payload.id}`, {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       const result = await queue.enqueue({ id: 'a' })
       expect(result).toBe('result-a')
@@ -21,11 +22,11 @@ describe('DispatchQueue', () => {
       let dispatchCount = 0
 
       const queue = new DispatchQueue<Payload>(
-        async (payload) => {
+        async _payload => {
           const idx = dispatchCount++
           return gates[idx].promise
         },
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
+        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' }
       )
 
       const first = queue.enqueue({ id: 'a' })
@@ -50,10 +51,11 @@ describe('DispatchQueue', () => {
       const gates = [deferred<string>(), deferred<string>(), deferred<string>()]
       let dispatchCount = 0
 
-      const queue = new DispatchQueue<Payload>(
-        async () => gates[dispatchCount++].promise,
-        { maxInFlight: 2, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gates[dispatchCount++].promise, {
+        maxInFlight: 2,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       queue.enqueue({ id: 'a' })
       queue.enqueue({ id: 'b' })
@@ -72,10 +74,11 @@ describe('DispatchQueue', () => {
   describe('queue policies', () => {
     it('reject: rejects immediately when queue is full', async () => {
       const gate = deferred<string>()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'reject' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gate.promise, {
+        maxInFlight: 1,
+        maxQueueDepth: 1,
+        queuePolicy: 'reject',
+      })
 
       queue.enqueue({ id: 'in-flight' })
       queue.enqueue({ id: 'pending' })
@@ -89,10 +92,11 @@ describe('DispatchQueue', () => {
 
     it('drop-latest: rejects newest item when queue is full', async () => {
       const gate = deferred<string>()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'drop-latest' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gate.promise, {
+        maxInFlight: 1,
+        maxQueueDepth: 1,
+        queuePolicy: 'drop-latest',
+      })
 
       queue.enqueue({ id: 'in-flight' })
       queue.enqueue({ id: 'pending' })
@@ -110,14 +114,14 @@ describe('DispatchQueue', () => {
       let dispatched = 0
 
       const queue = new DispatchQueue<Payload>(
-        async (payload) => {
+        async payload => {
           if (dispatched++ === 0) {
             await gate.promise
           }
           results.push(payload.id)
           return payload.id
         },
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'drop-oldest' },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'drop-oldest' }
       )
 
       const inFlight = queue.enqueue({ id: 'in-flight' })
@@ -139,10 +143,11 @@ describe('DispatchQueue', () => {
 
     it('block: holds items in blocked queue until capacity available', async () => {
       const gate = deferred<string>()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gate.promise, {
+        maxInFlight: 1,
+        maxQueueDepth: 1,
+        queuePolicy: 'block',
+      })
 
       queue.enqueue({ id: 'in-flight' })
       queue.enqueue({ id: 'pending' })
@@ -161,10 +166,11 @@ describe('DispatchQueue', () => {
 
   describe('getState', () => {
     it('returns current queue state', async () => {
-      const queue = new DispatchQueue<Payload>(
-        async () => 'ok',
-        { maxInFlight: 2, maxQueueDepth: 5, queuePolicy: 'reject' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => 'ok', {
+        maxInFlight: 2,
+        maxQueueDepth: 5,
+        queuePolicy: 'reject',
+      })
 
       const state = queue.getState()
       expect(state.maxInFlight).toBe(2)
@@ -182,11 +188,11 @@ describe('DispatchQueue', () => {
     it('pause stops dispatching new items', async () => {
       const results: string[] = []
       const queue = new DispatchQueue<Payload>(
-        async (payload) => {
+        async payload => {
           results.push(payload.id)
           return payload.id
         },
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
+        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' }
       )
 
       queue.pause()
@@ -202,11 +208,11 @@ describe('DispatchQueue', () => {
     it('resume processes queued items', async () => {
       const results: string[] = []
       const queue = new DispatchQueue<Payload>(
-        async (payload) => {
+        async payload => {
           results.push(payload.id)
           return payload.id
         },
-        { maxInFlight: 10, maxQueueDepth: 10, queuePolicy: 'block' },
+        { maxInFlight: 10, maxQueueDepth: 10, queuePolicy: 'block' }
       )
 
       queue.pause()
@@ -224,10 +230,11 @@ describe('DispatchQueue', () => {
   describe('dispose', () => {
     it('rejects all pending and in-flight items', async () => {
       const gate = deferred<string>()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gate.promise, {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       const inFlight = queue.enqueue({ id: 'in-flight' })
       const pending = queue.enqueue({ id: 'pending' })
@@ -240,10 +247,11 @@ describe('DispatchQueue', () => {
     })
 
     it('rejects new enqueues after dispose', async () => {
-      const queue = new DispatchQueue<Payload>(
-        async () => 'ok',
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => 'ok', {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       queue.dispose()
 
@@ -254,20 +262,22 @@ describe('DispatchQueue', () => {
 
   describe('isIdle', () => {
     it('returns true when queue is empty', () => {
-      const queue = new DispatchQueue<Payload>(
-        async () => 'ok',
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => 'ok', {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       expect(queue.isIdle()).toBe(true)
     })
 
     it('returns false when items are in flight', async () => {
       const gate = deferred<string>()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => gate.promise, {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       queue.enqueue({ id: 'a' })
       await tick()
@@ -286,7 +296,7 @@ describe('DispatchQueue', () => {
           await gate.promise
           return 'ok'
         },
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' }
       )
 
       const first = queue.enqueue({ id: 'first' })
@@ -308,7 +318,7 @@ describe('DispatchQueue', () => {
           await gate.promise
           return 'ok'
         },
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' }
       )
 
       const controller = new AbortController()
@@ -323,10 +333,11 @@ describe('DispatchQueue', () => {
     })
 
     it('rejects immediately if signal is already aborted', async () => {
-      const queue = new DispatchQueue<Payload>(
-        async () => 'ok',
-        { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-      )
+      const queue = new DispatchQueue<Payload>(async () => 'ok', {
+        maxInFlight: 1,
+        maxQueueDepth: 10,
+        queuePolicy: 'block',
+      })
 
       const controller = new AbortController()
       controller.abort()
@@ -342,7 +353,7 @@ describe('DispatchQueue', () => {
       const queue = new DispatchQueue<Payload>(
         async () => 'ok',
         { maxInFlight: 10, maxQueueDepth: 10, queuePolicy: 'block' },
-        { onQueued },
+        { onQueued }
       )
 
       queue.enqueue({ id: 'a' })
@@ -356,7 +367,7 @@ describe('DispatchQueue', () => {
       const queue = new DispatchQueue<Payload>(
         async () => 'ok',
         { maxInFlight: 10, maxQueueDepth: 10, queuePolicy: 'block' },
-        { onDispatch },
+        { onDispatch }
       )
 
       queue.enqueue({ id: 'a' })
@@ -371,7 +382,7 @@ describe('DispatchQueue', () => {
       const queue = new DispatchQueue<Payload>(
         async () => gate.promise,
         { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
-        { onBlocked },
+        { onBlocked }
       )
 
       queue.enqueue({ id: 'in-flight' })
@@ -390,7 +401,7 @@ describe('DispatchQueue', () => {
       const queue = new DispatchQueue<Payload>(
         async () => gate.promise,
         { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'reject' },
-        { onReject },
+        { onReject }
       )
 
       queue.enqueue({ id: 'in-flight' })
@@ -409,7 +420,7 @@ describe('DispatchQueue', () => {
       const queue = new DispatchQueue<Payload>(
         async () => gate.promise,
         { maxInFlight: 1, maxQueueDepth: 10, queuePolicy: 'block' },
-        { onCancel },
+        { onCancel }
       )
 
       queue.enqueue({ id: 'in-flight' })

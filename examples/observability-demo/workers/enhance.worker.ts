@@ -4,7 +4,11 @@
  */
 
 import { expose } from 'comlink'
-import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../core/task-worker'
+import {
+  createTaskWorker,
+  type StripTaskContext,
+  type TaskContext,
+} from '../../../core/task-worker'
 import type { AnalysisResult } from './analyze.worker'
 
 export interface EnhancedImage extends AnalysisResult {
@@ -14,7 +18,7 @@ export interface EnhancedImage extends AnalysisResult {
 }
 
 function simulateWork(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 const ENHANCEMENTS = [

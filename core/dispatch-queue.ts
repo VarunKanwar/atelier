@@ -71,7 +71,7 @@ export class DispatchQueue<T> {
   constructor(
     run: (payload: T, queueWaitMs: number) => Promise<unknown>,
     options: { maxInFlight: number; maxQueueDepth: number; queuePolicy: QueuePolicy },
-    hooks: DispatchQueueHooks<T> = {},
+    hooks: DispatchQueueHooks<T> = {}
   ) {
     this.run = run
     this.maxInFlight = options.maxInFlight
@@ -126,7 +126,9 @@ export class DispatchQueue<T> {
               this.hooks.onReject?.(dropped.payload, dropError)
             }
           } else {
-            const error = createDropError(this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject')
+            const error = createDropError(
+              this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject'
+            )
             this.hooks.onReject?.(payload, error)
             reject(error)
             return
@@ -206,10 +208,11 @@ export class DispatchQueue<T> {
     this.notifyStateChange()
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Queue reordering with multiple edge cases (crash recovery, cancellation)
   requeueInFlight(predicate: (payload: T) => boolean = () => true): T[] {
     // Move matching in-flight entries back to the queue (used when workers stop or crash).
     if (this.inFlight.size === 0) return []
-    const toRequeue = Array.from(this.inFlight).filter((entry) => predicate(entry.payload))
+    const toRequeue = Array.from(this.inFlight).filter(entry => predicate(entry.payload))
     if (toRequeue.length === 0) return []
     const requeued: T[] = []
 
@@ -256,7 +259,9 @@ export class DispatchQueue<T> {
           this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
           this.attachQueuedAbortHandler(entry)
         } else {
-          const error = createDropError(this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject')
+          const error = createDropError(
+            this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject'
+          )
           this.hooks.onReject?.(entry.payload, error)
           entry.reject(error)
         }
@@ -273,7 +278,7 @@ export class DispatchQueue<T> {
 
   rejectInFlight(predicate: (payload: T) => boolean, error: Error): T[] {
     if (this.inFlight.size === 0) return []
-    const toReject = Array.from(this.inFlight).filter((entry) => predicate(entry.payload))
+    const toReject = Array.from(this.inFlight).filter(entry => predicate(entry.payload))
     if (toReject.length === 0) return []
     const rejected: T[] = []
 
@@ -371,20 +376,20 @@ export class DispatchQueue<T> {
       Promise.resolve()
         .then(() => this.run(entry.payload, queueWaitMs))
         .then(
-          (value) => {
+          value => {
             // Ignore stale completions if this entry was requeued/re-dispatched.
             if (!settled && entry.attempt === attempt && this.inFlight.has(entry)) {
               settled = true
               entry.resolve(value)
             }
           },
-          (error) => {
+          error => {
             // Ignore stale completions if this entry was requeued/re-dispatched.
             if (!settled && entry.attempt === attempt && this.inFlight.has(entry)) {
               settled = true
               entry.reject(error)
             }
-          },
+          }
         )
         .finally(() => {
           if (abortHandler && signal) {

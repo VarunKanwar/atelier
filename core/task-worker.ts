@@ -5,6 +5,7 @@ export type TaskContext = {
   throwIfAborted: () => void
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: Worker handlers can have arbitrary signatures
 export type TaskHandlerMap = Record<string, (...args: any[]) => any>
 
 export type StripTaskContext<T> = {

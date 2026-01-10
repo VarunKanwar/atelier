@@ -4,7 +4,11 @@
  */
 
 import { expose } from 'comlink'
-import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../core/task-worker'
+import {
+  createTaskWorker,
+  type StripTaskContext,
+  type TaskContext,
+} from '../../../core/task-worker'
 import type { ResizedImage } from './resize.worker'
 
 export interface AnalysisResult extends ResizedImage {
@@ -22,14 +26,14 @@ async function ensureModelLoaded(): Promise<number> {
   if (modelLoaded) return 0
 
   console.log('[Analyze Worker] Loading ML model...')
-  await new Promise((resolve) => setTimeout(resolve, MODEL_LOAD_TIME))
+  await new Promise(resolve => setTimeout(resolve, MODEL_LOAD_TIME))
   modelLoaded = true
   console.log('[Analyze Worker] Model loaded!')
   return MODEL_LOAD_TIME
 }
 
 function simulateWork(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // Simulated object detection labels

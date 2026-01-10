@@ -157,7 +157,7 @@ export const createTelemetryStore = (options: TelemetryStoreOptions = {}): Telem
     }
   }
 
-  const emit: TelemetrySink = (event) => {
+  const emit: TelemetrySink = event => {
     const metrics = ensureTask(event)
     const workerIndex = event.workerIndex ?? 0
 
@@ -186,7 +186,7 @@ export const createTelemetryStore = (options: TelemetryStoreOptions = {}): Telem
         metrics.inFlight = Math.max(0, metrics.inFlight - 1)
         metrics.inFlightByWorker[workerIndex] = Math.max(
           0,
-          (metrics.inFlightByWorker[workerIndex] ?? 0) - 1,
+          (metrics.inFlightByWorker[workerIndex] ?? 0) - 1
         )
         metrics.success += 1
         if (event.durationMs !== undefined) {
@@ -197,7 +197,7 @@ export const createTelemetryStore = (options: TelemetryStoreOptions = {}): Telem
         metrics.inFlight = Math.max(0, metrics.inFlight - 1)
         metrics.inFlightByWorker[workerIndex] = Math.max(
           0,
-          (metrics.inFlightByWorker[workerIndex] ?? 0) - 1,
+          (metrics.inFlightByWorker[workerIndex] ?? 0) - 1
         )
         metrics.failure += 1
         metrics.lastError = event.error

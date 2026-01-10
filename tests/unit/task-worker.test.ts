@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createTaskWorker, type TaskContext } from '../../core/task-worker'
 
 const waitForAbort = (signal: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
+  new Promise(resolve => {
     if (signal.aborted) {
       resolve()
       return

@@ -5,11 +5,11 @@ vi.mock('comlink', () => ({
 }))
 
 import { SingletonWorker } from '../../core/singleton-worker'
-import { WorkerPool } from '../../core/worker-pool'
-import { WorkerCrashedError } from '../../core/worker-crash-error'
 import type { TaskEvent } from '../../core/types'
-import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
+import { WorkerCrashedError } from '../../core/worker-crash-error'
+import { WorkerPool } from '../../core/worker-pool'
 import { deferred, tick as flush } from '../helpers/deferred'
+import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 
 const makeWorkerFactory = (dispatches: DispatchHandler[]) => {
   const created: FakeWorker[] = []
@@ -43,14 +43,14 @@ describe('worker crash recovery', () => {
     const worker = new SingletonWorker(
       createWorker,
       'lazy',
-      (event) => events.push(event),
+      event => events.push(event),
       'task-1',
       'Test Task',
       1,
       Number.POSITIVE_INFINITY,
       'block',
       'restart-fail-in-flight',
-      3,
+      3
     )
 
     const promise = worker.dispatch('run', [])
@@ -62,7 +62,7 @@ describe('worker crash recovery', () => {
     await expect(promise).rejects.toBeInstanceOf(WorkerCrashedError)
     expect(worker.getState().workerStatus).toBe('crashed')
     expect(worker.getState().lastCrash).toBeTruthy()
-    expect(events.some((event) => event.type === 'worker:crash')).toBe(true)
+    expect(events.some(event => event.type === 'worker:crash')).toBe(true)
 
     vi.advanceTimersByTime(99)
     await flush()
@@ -96,7 +96,7 @@ describe('worker crash recovery', () => {
       Number.POSITIVE_INFINITY,
       'block',
       'restart-requeue-in-flight',
-      3,
+      3
     )
 
     const promise = pool.dispatch('run', [])
@@ -134,7 +134,7 @@ describe('worker crash recovery', () => {
       Number.POSITIVE_INFINITY,
       'block',
       'restart-fail-in-flight',
-      1,
+      1
     )
 
     const first = pool.dispatch('run', [])
