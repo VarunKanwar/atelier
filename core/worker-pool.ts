@@ -15,17 +15,17 @@
  * - Configure limits with `maxInFlight` and `maxQueueDepth`.
  */
 
-import { wrap, type Remote } from 'comlink'
+import { type Remote, wrap } from 'comlink'
+import { DispatchQueue } from './dispatch-queue'
 import type {
+  CrashPolicy,
   InitMode,
   QueuePolicy,
-  TaskExecutor,
   TaskDispatchOptions,
+  TaskExecutor,
   TelemetrySink,
   WorkerState,
-  CrashPolicy,
 } from './types'
-import { DispatchQueue } from './dispatch-queue'
 import { WorkerCrashedError } from './worker-crash-error'
 
 type WorkerCall = {
@@ -35,6 +35,7 @@ type WorkerCall = {
   key?: string
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped worker pools
 export class WorkerPool<T = any> implements TaskExecutor {
   private workers: (Remote<T> | null)[] = []
   private workerInstances: (Worker | null)[] = []
@@ -81,7 +82,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     queuePolicy: QueuePolicy = 'block',
     crashPolicy: CrashPolicy = 'restart-fail-in-flight',
     crashMaxRetries: number = 3,
-    idleTimeoutMs?: number,
+    idleTimeoutMs?: number
   ) {
     this.createWorker = createWorker
     this.poolSize = poolSize
@@ -152,7 +153,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
         onActive: () => {
           this.clearIdleTimer()
         },
-      },
+      }
     )
 
     // Eagerly create all workers if requested
@@ -187,6 +188,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
         ts: Date.now(),
       })
     }
+    // biome-ignore lint/style/noNonNullAssertion: initializeWorker() guarantees worker is initialized
     return this.workers[index]!
   }
 
@@ -246,10 +248,10 @@ export class WorkerPool<T = any> implements TaskExecutor {
   }
 
   private async waitForRestart(): Promise<void> {
-    if (this.restartTimers.every((timer) => timer === null)) {
+    if (this.restartTimers.every(timer => timer === null)) {
       return
     }
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       this.restartWaiters.push(resolve)
     })
   }
@@ -319,6 +321,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.detachCrashListeners(index)
     const workerProxy = this.workers[index]
     if (workerProxy) {
+      // biome-ignore lint/suspicious/noExplicitAny: Comlink's releaseProxy is not in public types
       ;(workerProxy as any)[Symbol.for('comlink.releaseProxy')]?.()
     }
     const workerInstance = this.workerInstances[index]
@@ -337,8 +340,8 @@ export class WorkerPool<T = any> implements TaskExecutor {
     if (effectivePolicy === 'restart-fail-in-flight') {
       // Settle in-flight calls for the crashed worker to avoid deadlocks.
       const rejected = this.queue.rejectInFlight(
-        (payload) => this.callIdToWorkerIndex.get(payload.callId) === index,
-        crashError,
+        payload => this.callIdToWorkerIndex.get(payload.callId) === index,
+        crashError
       )
       if (rejected.length > 0) {
         for (const payload of rejected) {
@@ -360,7 +363,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     if (effectivePolicy === 'restart-requeue-in-flight') {
       // Requeue in-flight work so it can be retried on a fresh worker.
       const requeued = this.queue.requeueInFlight(
-        (payload) => this.callIdToWorkerIndex.get(payload.callId) === index,
+        payload => this.callIdToWorkerIndex.get(payload.callId) === index
       )
       if (requeued.length > 0) {
         for (const payload of requeued) {
@@ -414,6 +417,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.dispatchCount++
 
     // Dispatch via worker harness to support cooperative cancellation.
+    // biome-ignore lint/suspicious/noExplicitAny: __dispatch is our custom harness method, not in Comlink types
     const workerDispatch = (worker as any).__dispatch
     if (typeof workerDispatch !== 'function') {
       throw new Error('Worker does not expose __dispatch (atelier harness missing)')
@@ -459,12 +463,13 @@ export class WorkerPool<T = any> implements TaskExecutor {
     } finally {
       this.queueDepthByWorker[workerIndex] = Math.max(
         0,
-        (this.queueDepthByWorker[workerIndex] ?? 0) - 1,
+        (this.queueDepthByWorker[workerIndex] ?? 0) - 1
       )
       this.callIdToWorkerIndex.delete(payload.callId)
     }
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: Generic task dispatch returns arbitrary worker method results
   async dispatch(method: string, args: unknown[], options?: TaskDispatchOptions): Promise<any> {
     if (this.halted) {
       return Promise.reject(this.haltedError ?? new Error('Task is halted after worker crash'))
@@ -477,21 +482,19 @@ export class WorkerPool<T = any> implements TaskExecutor {
         args,
         key: options?.key,
       },
-      options,
+      options
     )
   }
 
   getState(): WorkerState {
-    const activeWorkers = this.workers.filter((w) => w !== null).length
+    const activeWorkers = this.workers.filter(w => w !== null).length
     const queueState = this.queue.getState()
-    const workerStatus =
-      this.crashedWorkerIndices.size > 0 ? 'crashed' : this.workerStatus
-    const taskStatus =
-      this.manualPaused
-        ? 'paused'
-        : queueState.inFlight + queueState.pending + queueState.blocked > 0
-          ? 'active'
-          : 'idle'
+    const workerStatus = this.crashedWorkerIndices.size > 0 ? 'crashed' : this.workerStatus
+    const taskStatus = this.manualPaused
+      ? 'paused'
+      : queueState.inFlight + queueState.pending + queueState.blocked > 0
+        ? 'active'
+        : 'idle'
 
     return {
       type: 'parallel',
@@ -561,6 +564,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
       const workerProxy = this.workers[i]
       if (workerProxy) {
         // Comlink proxies have a special [releaseProxy] method
+        // biome-ignore lint/suspicious/noExplicitAny: Comlink's releaseProxy is not in public types
         ;(workerProxy as any)[Symbol.for('comlink.releaseProxy')]?.()
       }
       const workerInstance = this.workerInstances[i]
@@ -607,6 +611,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     if (workerIndex === undefined) return
     const worker = this.workers[workerIndex]
     if (!worker) return
+    // biome-ignore lint/suspicious/noExplicitAny: __cancel is our custom harness method, not in Comlink types
     const cancel = (worker as any).__cancel
     if (typeof cancel !== 'function') return
     Promise.resolve()

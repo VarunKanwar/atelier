@@ -1,5 +1,5 @@
 {
-  "name": "atelier",
+  "name": "@varunkanwar/atelier",
   "version": "0.1.0",
   "description": "A task runtime for browser workloads with parallelism, backpressure, and cancellation",
   "type": "module",
@@ -12,14 +12,24 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "examples": "vite examples/observability-demo"
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "examples": "vite examples/observability-demo",
+    "prepublishOnly": "bun run check && bun run typecheck && bun run test && bun run build"
   },
   "keywords": [
     "worker",
@@ -29,31 +39,41 @@
     "concurrency",
     "backpressure",
     "cancellation",
-    "queue"
+    "queue",
+    "comlink",
+    "browser",
+    "async",
+    "pool"
   ],
-  "author": "",
+  "author": "Varun Kanwar <varunkanwar1@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/VarunKanwar/atelier.git"
+  },
+  "homepage": "https://github.com/VarunKanwar/atelier#readme",
+  "bugs": {
+    "url": "https://github.com/VarunKanwar/atelier/issues"
   },
   "dependencies": {
     "comlink": "^4.4.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
     "@chakra-ui/react": "^3.30.0",
     "@emotion/react": "^11.14.0",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.7",
     "@vitejs/plugin-react": "^5.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "typescript": "~5.9.3",
+    "typescript": "^5.9.3",
     "vite": "^6.3.5",
-    "vitest": "^4.0.16",
-    "@types/bun": "latest"
+    "vitest": "^4.0.16"
   },
   "peerDependencies": {},
   "engines": {
-    "node": ">=18"
-  },
-  "private": true
+    "node": ">=18",
+    "bun": ">=1.0.0"
+  }
 }

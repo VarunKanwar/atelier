@@ -1,5 +1,10 @@
 # Atelier
 
+[![npm version](https://img.shields.io/npm/v/@varunkanwar/atelier.svg)](https://www.npmjs.com/package/@varunkanwar/atelier)
+[![npm downloads](https://img.shields.io/npm/dm/@varunkanwar/atelier.svg)](https://www.npmjs.com/package/@varunkanwar/atelier)
+[![license](https://img.shields.io/npm/l/@varunkanwar/atelier.svg)](https://github.com/VarunKanwar/atelier/blob/main/LICENSE)
+[![CI](https://github.com/VarunKanwar/atelier/actions/workflows/test.yml/badge.svg)](https://github.com/VarunKanwar/atelier/actions/workflows/test.yml)
+
 Atelier is a small task runtime for browser workloads that need parallelism,
 backpressure, and cancellation without a pipeline DSL.
 
@@ -28,17 +33,19 @@ correctness over backward compatibility.
 ## Installation
 
 ```bash
-bun add atelier
+bun add @varunkanwar/atelier
 # or
-npm install atelier
+npm install @varunkanwar/atelier
 ```
+
+**Note:** Atelier is designed for browser workloads and works best with Bun or bundlers (Vite, Webpack, esbuild, etc.). For direct Node.js usage without a bundler, you may need additional configuration for ESM imports.
 
 ## Quick start
 
 Main thread:
 
 ```ts
-import { createTaskRuntime } from 'atelier'
+import { createTaskRuntime } from '@varunkanwar/atelier'
 
 type ResizeAPI = {
   process: (image: ImageData) => Promise<ImageData>
@@ -121,6 +128,24 @@ const task = runtime.defineTask({
 - [Worker Crash Recovery](./docs/worker-crash-recovery.md) - Crash handling details
 - [Testing](./docs/testing.md) - Testing patterns
 
+## Development
+
+```bash
+# Clone and install
+git clone https://github.com/VarunKanwar/atelier.git
+cd atelier
+bun install
+
+# Run tests
+bun test
+
+# Lint and format
+bun run check:fix
+
+# Build
+bun run build
+```
+
 ## Examples
 
 See the `examples/` directory for runnable demos:
@@ -130,8 +155,7 @@ See the `examples/` directory for runnable demos:
 To run the observability demo:
 
 ```bash
-cd examples/observability-demo
-npx vite   # or any dev server that handles TypeScript
+bun run examples
 ```
 
-Open `http://localhost:5173` (or the URL shown) in your browser.
+Open `http://localhost:5173` in your browser.

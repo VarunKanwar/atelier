@@ -5,8 +5,8 @@ vi.mock('comlink', () => ({
 }))
 
 import { createTaskRuntime } from '../../core/runtime'
-import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
 import { deferred, tick } from '../helpers/deferred'
+import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 
 type TestAPI = {
   work: () => Promise<string>
@@ -64,13 +64,13 @@ describe('Runtime Snapshots', () => {
 
       expect(snapshot.tasks).toHaveLength(2)
 
-      const task1 = snapshot.tasks.find((t) => t.taskId === 'task-1')
+      const task1 = snapshot.tasks.find(t => t.taskId === 'task-1')
       expect(task1).toBeDefined()
       expect(task1?.taskName).toBe('First Task')
       expect(task1?.type).toBe('singleton')
       expect(task1?.init).toBe('lazy')
 
-      const task2 = snapshot.tasks.find((t) => t.taskId === 'task-2')
+      const task2 = snapshot.tasks.find(t => t.taskId === 'task-2')
       expect(task2).toBeDefined()
       expect(task2?.taskName).toBe('Second Task')
       expect(task2?.type).toBe('parallel')
@@ -134,7 +134,7 @@ describe('Runtime Snapshots', () => {
       })
 
       const snapshots: unknown[] = []
-      const unsubscribe = runtime.subscribeRuntimeSnapshot((snapshot) => {
+      const unsubscribe = runtime.subscribeRuntimeSnapshot(snapshot => {
         snapshots.push(snapshot)
       })
 
@@ -150,10 +150,10 @@ describe('Runtime Snapshots', () => {
 
       const snapshots: unknown[] = []
       const unsubscribe = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => {
+        snapshot => {
           snapshots.push(snapshot)
         },
-        { emitImmediately: false },
+        { emitImmediately: false }
       )
 
       expect(snapshots).toHaveLength(0)
@@ -170,10 +170,10 @@ describe('Runtime Snapshots', () => {
 
       const snapshots: unknown[] = []
       const unsubscribe = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => {
+        snapshot => {
           snapshots.push(snapshot)
         },
-        { intervalMs: 100, emitImmediately: false },
+        { intervalMs: 100, emitImmediately: false }
       )
 
       expect(snapshots).toHaveLength(0)
@@ -196,10 +196,10 @@ describe('Runtime Snapshots', () => {
 
       const snapshots: unknown[] = []
       const unsubscribe = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => {
+        snapshot => {
           snapshots.push(snapshot)
         },
-        { intervalMs: 100, emitImmediately: false },
+        { intervalMs: 100, emitImmediately: false }
       )
 
       vi.advanceTimersByTime(100)
@@ -226,10 +226,10 @@ describe('Runtime Snapshots', () => {
 
       const snapshots: unknown[] = []
       const unsubscribe = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => {
+        snapshot => {
           snapshots.push(snapshot)
         },
-        { intervalMs: 50, emitImmediately: true, onlyOnChange: true },
+        { intervalMs: 50, emitImmediately: true, onlyOnChange: true }
       )
 
       // Initial emission
@@ -264,15 +264,15 @@ describe('Runtime Snapshots', () => {
       const snapshots1: unknown[] = []
       const snapshots2: unknown[] = []
 
-      const unsub1 = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => snapshots1.push(snapshot),
-        { intervalMs: 100, emitImmediately: false },
-      )
+      const unsub1 = runtime.subscribeRuntimeSnapshot(snapshot => snapshots1.push(snapshot), {
+        intervalMs: 100,
+        emitImmediately: false,
+      })
 
-      const unsub2 = runtime.subscribeRuntimeSnapshot(
-        (snapshot) => snapshots2.push(snapshot),
-        { intervalMs: 50, emitImmediately: false },
-      )
+      const unsub2 = runtime.subscribeRuntimeSnapshot(snapshot => snapshots2.push(snapshot), {
+        intervalMs: 50,
+        emitImmediately: false,
+      })
 
       vi.advanceTimersByTime(100)
 

@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-import { parallelLimit, yieldAsCompleted } from '../../core/parallel-limit'
+import { describe, expect, it } from 'vitest'
 import { createAbortTaskController } from '../../core/abort-task-controller'
+import { parallelLimit, yieldAsCompleted } from '../../core/parallel-limit'
 import { deferred } from '../helpers/deferred'
 
 describe('parallelLimit', () => {
@@ -13,7 +13,7 @@ describe('parallelLimit', () => {
 
       const results: number[] = []
       const run = async () => {
-        for await (const value of parallelLimit(items, 2, async (item) => {
+        for await (const value of parallelLimit(items, 2, async item => {
           inFlight += 1
           maxInFlight = Math.max(maxInFlight, inFlight)
           await gates[item - 1].promise
@@ -38,7 +38,7 @@ describe('parallelLimit', () => {
 
     it('throws for invalid limit', async () => {
       const run = async () => {
-        for await (const _ of parallelLimit([1], 0, async (x) => x)) {
+        for await (const _ of parallelLimit([1], 0, async x => x)) {
           // Should not reach here
         }
       }
@@ -52,7 +52,7 @@ describe('parallelLimit', () => {
       const results: number[] = []
 
       const run = async () => {
-        for await (const value of parallelLimit(items, 1, async (item) => {
+        for await (const value of parallelLimit(items, 1, async item => {
           if (item === 2) throw new Error('boom')
           return item
         })) {
@@ -68,10 +68,15 @@ describe('parallelLimit', () => {
       const items = [1, 2, 3]
       const results: number[] = []
 
-      for await (const value of parallelLimit(items, 1, async (item) => {
-        if (item === 2) throw new Error('boom')
-        return item
-      }, { errorPolicy: 'continue' })) {
+      for await (const value of parallelLimit(
+        items,
+        1,
+        async item => {
+          if (item === 2) throw new Error('boom')
+          return item
+        },
+        { errorPolicy: 'continue' }
+      )) {
         results.push(value)
       }
 
@@ -82,13 +87,18 @@ describe('parallelLimit', () => {
       const items = [1, 2, 3]
       const errors: Array<{ error: unknown; item: number }> = []
 
-      for await (const _ of parallelLimit(items, 1, async (item) => {
-        if (item === 2) throw new Error('boom')
-        return item
-      }, {
-        errorPolicy: 'continue',
-        onError: (error, item) => errors.push({ error, item }),
-      })) {
+      for await (const _ of parallelLimit(
+        items,
+        1,
+        async item => {
+          if (item === 2) throw new Error('boom')
+          return item
+        },
+        {
+          errorPolicy: 'continue',
+          onError: (error, item) => errors.push({ error, item }),
+        }
+      )) {
         // collect
       }
 
@@ -103,10 +113,15 @@ describe('parallelLimit', () => {
       const items = [1, 2, 3]
       const results: Array<{ status: string; item: number }> = []
 
-      for await (const result of parallelLimit(items, 1, async (item) => {
-        if (item === 2) throw new Error('boom')
-        return item * 10
-      }, { returnSettled: true })) {
+      for await (const result of parallelLimit(
+        items,
+        1,
+        async item => {
+          if (item === 2) throw new Error('boom')
+          return item * 10
+        },
+        { returnSettled: true }
+      )) {
         results.push({ status: result.status, item: result.item })
       }
 
@@ -120,7 +135,9 @@ describe('parallelLimit', () => {
       const items = [1, 2]
       const results = []
 
-      for await (const result of parallelLimit(items, 2, async (item) => item * 10, { returnSettled: true })) {
+      for await (const result of parallelLimit(items, 2, async item => item * 10, {
+        returnSettled: true,
+      })) {
         results.push(result)
       }
 
@@ -133,9 +150,14 @@ describe('parallelLimit', () => {
       const results: Array<{ status: string; error?: unknown; value?: unknown }> = []
       const error = new Error('test error')
 
-      for await (const result of parallelLimit(items, 1, async () => {
-        throw error
-      }, { returnSettled: true })) {
+      for await (const result of parallelLimit(
+        items,
+        1,
+        async () => {
+          throw error
+        },
+        { returnSettled: true }
+      )) {
         results.push(result)
       }
 
@@ -155,9 +177,9 @@ describe('parallelLimit', () => {
       const items = ['a', 'b', 'c']
       const results: string[] = []
 
-      for await (const value of parallelLimit(items, 2, async (item) => item, {
+      for await (const value of parallelLimit(items, 2, async item => item, {
         abortTaskController: controller,
-        keyOf: (item) => item,
+        keyOf: item => item,
       })) {
         results.push(value)
       }
@@ -170,15 +192,20 @@ describe('parallelLimit', () => {
       const items = ['a', 'b']
       const results: string[] = []
 
-      for await (const value of parallelLimit(items, 2, async (item) => {
-        if (item === 'a') {
-          controller.abort('a')
+      for await (const value of parallelLimit(
+        items,
+        2,
+        async item => {
+          if (item === 'a') {
+            controller.abort('a')
+          }
+          return item
+        },
+        {
+          abortTaskController: controller,
+          keyOf: item => item,
         }
-        return item
-      }, {
-        abortTaskController: controller,
-        keyOf: (item) => item,
-      })) {
+      )) {
         results.push(value)
       }
 
@@ -190,14 +217,19 @@ describe('parallelLimit', () => {
       const items = [1]
       const results: number[] = []
 
-      for await (const value of parallelLimit(items, 1, async () => {
-        const error = new Error('aborted')
-        ;(error as Error & { name?: string }).name = 'AbortError'
-        throw error
-      }, {
-        abortTaskController: controller,
-        keyOf: () => 'a',
-      })) {
+      for await (const value of parallelLimit(
+        items,
+        1,
+        async () => {
+          const error = new Error('aborted')
+          ;(error as Error & { name?: string }).name = 'AbortError'
+          throw error
+        },
+        {
+          abortTaskController: controller,
+          keyOf: () => 'a',
+        }
+      )) {
         results.push(value)
       }
 
@@ -213,10 +245,15 @@ describe('parallelLimit', () => {
       const gates = items.map(() => deferred<number>())
 
       const run = async () => {
-        for await (const value of parallelLimit(items, 2, async (item) => {
-          processed.push(item)
-          return gates[item - 1].promise
-        }, { signal: controller.signal })) {
+        for await (const value of parallelLimit(
+          items,
+          2,
+          async item => {
+            processed.push(item)
+            return gates[item - 1].promise
+          },
+          { signal: controller.signal }
+        )) {
           results.push(value)
         }
       }
@@ -245,7 +282,7 @@ describe('parallelLimit', () => {
 describe('yieldAsCompleted', () => {
   it('yields promises in completion order', async () => {
     const gates = [deferred<string>(), deferred<string>(), deferred<string>()]
-    const promises = gates.map((g) => g.promise)
+    const promises = gates.map(g => g.promise)
     const results: string[] = []
 
     const run = async () => {

@@ -4,10 +4,10 @@
  */
 
 import type { Remote } from 'comlink'
-import { WorkerPool } from './worker-pool'
-import { SingletonWorker } from './singleton-worker'
 import type { AbortTaskController } from './abort-task-controller'
+import { SingletonWorker } from './singleton-worker'
 import type { InitMode, TaskConfig, TaskDispatchOptions, TaskExecutor } from './types'
+import { WorkerPool } from './worker-pool'
 
 export type Task<T> = Remote<T> & {
   // Add internal properties for observability
@@ -54,6 +54,7 @@ export type DefineTaskContext = {
  * ```
  */
 export function createDefineTask(context: DefineTaskContext) {
+  // biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped task definitions
   return function defineTask<T = any>(config: TaskConfig): Task<T> {
     const {
       type,
@@ -73,140 +74,136 @@ export function createDefineTask(context: DefineTaskContext) {
       crashMaxRetries,
     } = config
 
-  // Stable ID for telemetry; auto-generated if not provided.
-  const resolvedTaskId = taskId ?? `task-${globalTaskId++}`
-  // Executor-level backpressure defaults:
-  // - parallel: allow poolSize in-flight
-  // - singleton: serialize with 1 in-flight
-  const resolvedMaxQueueDepth = maxQueueDepth ?? Number.POSITIVE_INFINITY
-  const resolvedMaxInFlight =
-    maxInFlight ??
-    (type === 'parallel' ? poolSize : 1)
-  const resolvedQueuePolicy = queuePolicy ?? 'block'
+    // Stable ID for telemetry; auto-generated if not provided.
+    const resolvedTaskId = taskId ?? `task-${globalTaskId++}`
+    // Executor-level backpressure defaults:
+    // - parallel: allow poolSize in-flight
+    // - singleton: serialize with 1 in-flight
+    const resolvedMaxQueueDepth = maxQueueDepth ?? Number.POSITIVE_INFINITY
+    const resolvedMaxInFlight = maxInFlight ?? (type === 'parallel' ? poolSize : 1)
+    const resolvedQueuePolicy = queuePolicy ?? 'block'
 
-  // Create executor based on task type
-  const executor: TaskExecutor =
-    type === 'parallel'
-      ? new WorkerPool<T>(
-          createWorker,
-          poolSize,
-          init,
-          telemetry,
-          resolvedTaskId,
-          taskName,
-          resolvedMaxInFlight,
-          resolvedMaxQueueDepth,
-          resolvedQueuePolicy,
-          crashPolicy,
-          crashMaxRetries,
-          idleTimeoutMs,
-        )
-      : new SingletonWorker<T>(
-          createWorker,
-          init,
-          telemetry,
-          resolvedTaskId,
-          taskName,
-          resolvedMaxInFlight,
-          resolvedMaxQueueDepth,
-          resolvedQueuePolicy,
-          crashPolicy,
-          crashMaxRetries,
-          idleTimeoutMs,
-        )
-
-  let disposed = false
-  let unregister: (() => void) | null = context.registerTask({
-    taskId: resolvedTaskId,
-    taskName,
-    type,
-    init,
-    poolSize: type === 'parallel' ? poolSize : undefined,
-    executor,
-  })
-
-  // Create a proxy that intercepts method calls and forwards to the executor.
-  const proxy = new Proxy({} as Task<T>, {
-    get(_target, prop: string | symbol) {
-      // Avoid thenable behavior when tasks are passed to Promise resolution.
-      if (prop === 'then') {
-        return undefined
-      }
-      // Expose internal executor for debugging
-      if (prop === '__executor') {
-        return executor
-      }
-
-      // Expose config for debugging
-      if (prop === '__config') {
-        return config
-      }
-
-      // Expose state getter
-      if (prop === 'getState') {
-        return () => executor.getState()
-      }
-
-      if (prop === 'startWorkers') {
-        return () => executor.startWorkers()
-      }
-
-      if (prop === 'stopWorkers') {
-        return () => executor.stopWorkers()
-      }
-
-      // Expose dispose method
-      if (prop === 'dispose') {
-        return () => {
-          try {
-            executor.dispose()
-          } finally {
-            disposed = true
-            unregister?.()
-            unregister = null
-          }
-        }
-      }
-
-      // All other properties are assumed to be worker methods.
-      if (typeof prop === 'string') {
-        return (...args: any[]) => {
-          if (disposed) {
-            return Promise.reject(createDisposedError())
-          }
-
-          const resolvedKey = resolveKey(keyOf, args)
-          const keySignal = resolvedKey
-            ? context.abortTaskController.signalFor(resolvedKey)
-            : undefined
-          const { signal, cleanup: signalCleanup } = buildDispatchSignal(
-            keySignal,
-            timeoutMs,
+    // Create executor based on task type
+    const executor: TaskExecutor =
+      type === 'parallel'
+        ? new WorkerPool<T>(
+            createWorker,
+            poolSize,
+            init,
+            telemetry,
+            resolvedTaskId,
+            taskName,
+            resolvedMaxInFlight,
+            resolvedMaxQueueDepth,
+            resolvedQueuePolicy,
+            crashPolicy,
+            crashMaxRetries,
+            idleTimeoutMs
           )
-          const options: TaskDispatchOptions | undefined =
-            signal || resolvedKey ? { signal, key: resolvedKey } : undefined
+        : new SingletonWorker<T>(
+            createWorker,
+            init,
+            telemetry,
+            resolvedTaskId,
+            taskName,
+            resolvedMaxInFlight,
+            resolvedMaxQueueDepth,
+            resolvedQueuePolicy,
+            crashPolicy,
+            crashMaxRetries,
+            idleTimeoutMs
+          )
 
-          let dispatchPromise: Promise<unknown>
-          try {
-            dispatchPromise = executor.dispatch(prop, args, options)
-          } catch (error) {
-            signalCleanup?.()
-            return Promise.reject(error)
-          }
+    let disposed = false
+    let unregister: (() => void) | null = context.registerTask({
+      taskId: resolvedTaskId,
+      taskName,
+      type,
+      init,
+      poolSize: type === 'parallel' ? poolSize : undefined,
+      executor,
+    })
 
-          if (!signalCleanup) {
-            return dispatchPromise
-          }
-
-          return dispatchPromise.finally(() => {
-            signalCleanup()
-          })
+    // Create a proxy that intercepts method calls and forwards to the executor.
+    const proxy = new Proxy({} as Task<T>, {
+      get(_target, prop: string | symbol) {
+        // Avoid thenable behavior when tasks are passed to Promise resolution.
+        if (prop === 'then') {
+          return undefined
         }
-      }
+        // Expose internal executor for debugging
+        if (prop === '__executor') {
+          return executor
+        }
 
-      return undefined
-    },
-  })
+        // Expose config for debugging
+        if (prop === '__config') {
+          return config
+        }
+
+        // Expose state getter
+        if (prop === 'getState') {
+          return () => executor.getState()
+        }
+
+        if (prop === 'startWorkers') {
+          return () => executor.startWorkers()
+        }
+
+        if (prop === 'stopWorkers') {
+          return () => executor.stopWorkers()
+        }
+
+        // Expose dispose method
+        if (prop === 'dispose') {
+          return () => {
+            try {
+              executor.dispose()
+            } finally {
+              disposed = true
+              unregister?.()
+              unregister = null
+            }
+          }
+        }
+
+        // All other properties are assumed to be worker methods.
+        if (typeof prop === 'string') {
+          // biome-ignore lint/suspicious/noExplicitAny: Proxy handler intercepts arbitrary method calls
+          return (...args: any[]) => {
+            if (disposed) {
+              return Promise.reject(createDisposedError())
+            }
+
+            const resolvedKey = resolveKey(keyOf, args)
+            const keySignal = resolvedKey
+              ? context.abortTaskController.signalFor(resolvedKey)
+              : undefined
+            const { signal, cleanup: signalCleanup } = buildDispatchSignal(keySignal, timeoutMs)
+            const options: TaskDispatchOptions | undefined =
+              signal || resolvedKey ? { signal, key: resolvedKey } : undefined
+
+            let dispatchPromise: Promise<unknown>
+            try {
+              dispatchPromise = executor.dispatch(prop, args, options)
+            } catch (error) {
+              signalCleanup?.()
+              return Promise.reject(error)
+            }
+
+            if (!signalCleanup) {
+              return dispatchPromise
+            }
+
+            return dispatchPromise.finally(() => {
+              signalCleanup()
+            })
+          }
+        }
+
+        return undefined
+      },
+    })
 
     return proxy
   }
@@ -220,7 +217,10 @@ const createDisposedError = () => {
   return error
 }
 
-const resolveKey = (keyOf: TaskConfig['keyOf'] | undefined, args: unknown[]): string | undefined => {
+const resolveKey = (
+  keyOf: TaskConfig['keyOf'] | undefined,
+  args: unknown[]
+): string | undefined => {
   if (!keyOf) return undefined
   const key = keyOf(...args)
   if (typeof key !== 'string') return undefined
@@ -230,7 +230,7 @@ const resolveKey = (keyOf: TaskConfig['keyOf'] | undefined, args: unknown[]): st
 
 const buildDispatchSignal = (
   keySignal: AbortSignal | undefined,
-  timeoutMs?: number,
+  timeoutMs?: number
 ): { signal?: AbortSignal; cleanup?: () => void } => {
   const timeout = createTimeoutSignal(timeoutMs)
   const signals = [keySignal, timeout.signal].filter(Boolean) as AbortSignal[]
@@ -249,7 +249,7 @@ const buildDispatchSignal = (
 }
 
 const createTimeoutSignal = (
-  timeoutMs?: number,
+  timeoutMs?: number
 ): { signal?: AbortSignal; cleanup?: () => void } => {
   if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return {}
@@ -266,9 +266,7 @@ const createTimeoutSignal = (
   }
 }
 
-const composeSignals = (
-  signals: AbortSignal[],
-): { signal: AbortSignal; cleanup?: () => void } => {
+const composeSignals = (signals: AbortSignal[]): { signal: AbortSignal; cleanup?: () => void } => {
   if (signals.length === 1) return { signal: signals[0] }
   const anySignal = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal })
     .any

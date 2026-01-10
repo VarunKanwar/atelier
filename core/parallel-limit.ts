@@ -69,11 +69,12 @@ export function parallelLimit<T, R>(
   fn: (item: T) => Promise<R>,
   options: ParallelLimitSettledOptions<T>
 ): AsyncGenerator<ParallelLimitResult<R, T>, void, unknown>
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Pipeline orchestration with cancellation, error policies, and backpressure
 export async function* parallelLimit<T, R>(
   items: Iterable<T>,
   limit: number,
   fn: (item: T) => Promise<R>,
-  options: ParallelLimitOptions<T> | ParallelLimitSettledOptions<T> = {},
+  options: ParallelLimitOptions<T> | ParallelLimitSettledOptions<T> = {}
 ): AsyncGenerator<R | ParallelLimitResult<R, T>, void, unknown> {
   if (!Number.isFinite(limit) || limit < 1) {
     throw new Error('parallelLimit requires a limit of at least 1')
@@ -86,7 +87,7 @@ export async function* parallelLimit<T, R>(
   const returnSettled = (options as ParallelLimitSettledOptions<T>).returnSettled === true
   const errorPolicy = returnSettled
     ? 'continue'
-    : (options as ParallelLimitOptions<T>).errorPolicy ?? 'fail-fast'
+    : ((options as ParallelLimitOptions<T>).errorPolicy ?? 'fail-fast')
   const onError = (options as ParallelLimitOptions<T>).onError
   const abortTaskController = (options as ParallelLimitOptions<T>).abortTaskController
   const keyOf = (options as ParallelLimitOptions<T>).keyOf
@@ -110,12 +111,12 @@ export async function* parallelLimit<T, R>(
       const base = Promise.resolve()
         .then(() => fn(value))
         .then(
-          (result) => ({ status: 'fulfilled', value: result, item: value, key }) as const,
-          (error) => ({ status: 'rejected', error, item: value, key }) as const,
+          result => ({ status: 'fulfilled', value: result, item: value, key }) as const,
+          error => ({ status: 'rejected', error, item: value, key }) as const
         )
 
       let wrapped: Promise<ExecutingEntry>
-      wrapped = base.then((completion) => ({ completion, wrapped }))
+      wrapped = base.then(completion => ({ completion, wrapped }))
       executing.add(wrapped)
       return true
     }
@@ -133,7 +134,7 @@ export async function* parallelLimit<T, R>(
     const { completion, wrapped } = await Promise.race(executing)
     executing.delete(wrapped)
     const keyAborted = completion.key
-      ? abortTaskController?.isAborted(completion.key) ?? false
+      ? (abortTaskController?.isAborted(completion.key) ?? false)
       : false
 
     if (completion.status === 'rejected') {
@@ -168,13 +169,15 @@ export async function* parallelLimit<T, R>(
  * @param promises - Array of promises
  * @yields Results in completion order
  */
-export async function* yieldAsCompleted<T>(promises: Promise<T>[]): AsyncGenerator<T, void, unknown> {
+export async function* yieldAsCompleted<T>(
+  promises: Promise<T>[]
+): AsyncGenerator<T, void, unknown> {
   const pending = new Set<Promise<{ value: T; promise: Promise<T> }>>()
   const wrappedByOriginal = new Map<Promise<T>, Promise<{ value: T; promise: Promise<T> }>>()
 
   for (const promise of promises) {
     // Tag each promise so we can remove by identity, not by value.
-    const wrapped = promise.then((value) => ({ value, promise }))
+    const wrapped = promise.then(value => ({ value, promise }))
     wrappedByOriginal.set(promise, wrapped)
     pending.add(wrapped)
   }

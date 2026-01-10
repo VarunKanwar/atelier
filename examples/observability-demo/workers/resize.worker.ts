@@ -4,7 +4,11 @@
  */
 
 import { expose } from 'comlink'
-import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../core/task-worker'
+import {
+  createTaskWorker,
+  type StripTaskContext,
+  type TaskContext,
+} from '../../../core/task-worker'
 
 export interface ImageData {
   name: string
@@ -21,7 +25,7 @@ export interface ResizedImage extends ImageData {
 
 // Simulate variable processing time
 function simulateWork(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 const handlers = {

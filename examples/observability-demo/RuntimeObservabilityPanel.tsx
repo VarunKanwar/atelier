@@ -10,9 +10,8 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { useMemo } from 'react'
-
-import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 import type { RuntimeTaskSnapshot, TaskRuntime } from '../../core'
+import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 
 export type RuntimeObservabilityPanelProps = {
   runtime: TaskRuntime
@@ -24,7 +23,7 @@ export type RuntimeObservabilityPanelProps = {
 const formatLimit = (value?: number): string =>
   value === undefined || !Number.isFinite(value) ? '∞' : String(value)
 
-const formatCount = (value?: number): number => (value ?? 0)
+const formatCount = (value?: number): number => value ?? 0
 
 const getMax = (value?: number): number | undefined =>
   value !== undefined && Number.isFinite(value) ? value : undefined
@@ -106,12 +105,9 @@ const WorkerBars = ({ values = [] }: { values?: number[] }) => {
 
 const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
   const tone = getAlertTone(task)
-  const borderColor =
-    tone === 'danger' ? 'red.200' : tone === 'warning' ? 'orange.200' : 'gray.200'
-  const badgeColor =
-    task.type === 'parallel' ? 'blue.50' : 'purple.50'
-  const badgeText =
-    task.type === 'parallel' ? 'blue.700' : 'purple.700'
+  const borderColor = tone === 'danger' ? 'red.200' : tone === 'warning' ? 'orange.200' : 'gray.200'
+  const badgeColor = task.type === 'parallel' ? 'blue.50' : 'purple.50'
+  const badgeText = task.type === 'parallel' ? 'blue.700' : 'purple.700'
 
   const inFlight = formatCount(task.queueDepth)
   const pending = formatCount(task.pendingQueueDepth)
@@ -186,8 +182,8 @@ const RuntimeObservabilityPanel = ({
       return (a.taskName ?? a.taskId).localeCompare(b.taskName ?? b.taskId)
     })
   }, [snapshot.tasks])
-  const parallelTasks = tasks.filter((task) => task.type === 'parallel')
-  const singletonTasks = tasks.filter((task) => task.type === 'singleton')
+  const parallelTasks = tasks.filter(task => task.type === 'parallel')
+  const singletonTasks = tasks.filter(task => task.type === 'singleton')
 
   return (
     <Box borderWidth="1px" borderColor="gray.200" rounded="xl" p={6} bg="white">
@@ -236,12 +232,10 @@ const RuntimeObservabilityPanel = ({
                     </Table.Cell>
                   </Table.Row>
                 ) : (
-                  tasks.map((task) => (
+                  tasks.map(task => (
                     <Table.Row key={task.taskId}>
                       <Table.Cell>
-                        <Text fontWeight="semibold">
-                          {task.taskName ?? task.taskId}
-                        </Text>
+                        <Text fontWeight="semibold">{task.taskName ?? task.taskId}</Text>
                         <Text fontSize="xs" color="gray.500">
                           {task.taskId}
                         </Text>
@@ -264,9 +258,7 @@ const RuntimeObservabilityPanel = ({
                       <Table.Cell textAlign="end">
                         {formatCount(task.pendingQueueDepth)}/{formatLimit(task.maxQueueDepth)}
                       </Table.Cell>
-                      <Table.Cell textAlign="end">
-                        {formatCount(task.blockedQueueDepth)}
-                      </Table.Cell>
+                      <Table.Cell textAlign="end">{formatCount(task.blockedQueueDepth)}</Table.Cell>
                       <Table.Cell>{task.queuePolicy ?? 'block'}</Table.Cell>
                     </Table.Row>
                   ))
@@ -289,7 +281,7 @@ const RuntimeObservabilityPanel = ({
                 {parallelTasks.length === 0 ? (
                   <EmptyState label="No parallel tasks registered." />
                 ) : (
-                  parallelTasks.map((task) => <TaskCard key={task.taskId} task={task} />)
+                  parallelTasks.map(task => <TaskCard key={task.taskId} task={task} />)
                 )}
               </Stack>
             </Box>
@@ -305,7 +297,7 @@ const RuntimeObservabilityPanel = ({
                 {singletonTasks.length === 0 ? (
                   <EmptyState label="No singleton tasks registered." />
                 ) : (
-                  singletonTasks.map((task) => <TaskCard key={task.taskId} task={task} />)
+                  singletonTasks.map(task => <TaskCard key={task.taskId} task={task} />)
                 )}
               </Stack>
             </Box>

@@ -3,8 +3,8 @@ import {
   Box,
   Button,
   Container,
-  HStack,
   Heading,
+  HStack,
   Input,
   SimpleGrid,
   Stack,
@@ -13,11 +13,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { createTaskRuntime, parallelLimit, type TaskRuntime } from '../../core'
+import RuntimeObservabilityPanel from './RuntimeObservabilityPanel'
 import type { AnalyzeAPI } from './workers/analyze.worker'
 import type { EnhanceAPI } from './workers/enhance.worker'
-import type { ImageData } from './workers/resize.worker'
-import type { ResizeAPI } from './workers/resize.worker'
-import RuntimeObservabilityPanel from './RuntimeObservabilityPanel'
+import type { ImageData, ResizeAPI } from './workers/resize.worker'
 
 type RunStatus = 'idle' | 'running' | 'done'
 
@@ -30,20 +29,23 @@ type ResultItem = {
 const createTasks = (runtime: TaskRuntime) => {
   const resize = runtime.defineTask<ResizeAPI>({
     type: 'parallel',
-    worker: () => new Worker(new URL('./workers/resize.worker.ts', import.meta.url), { type: 'module' }),
+    worker: () =>
+      new Worker(new URL('./workers/resize.worker.ts', import.meta.url), { type: 'module' }),
     poolSize: 4,
     init: 'lazy',
     taskName: 'resize',
   })
   const analyze = runtime.defineTask<AnalyzeAPI>({
     type: 'singleton',
-    worker: () => new Worker(new URL('./workers/analyze.worker.ts', import.meta.url), { type: 'module' }),
+    worker: () =>
+      new Worker(new URL('./workers/analyze.worker.ts', import.meta.url), { type: 'module' }),
     init: 'eager',
     taskName: 'analyze',
   })
   const enhance = runtime.defineTask<EnhanceAPI>({
     type: 'singleton',
-    worker: () => new Worker(new URL('./workers/enhance.worker.ts', import.meta.url), { type: 'module' }),
+    worker: () =>
+      new Worker(new URL('./workers/enhance.worker.ts', import.meta.url), { type: 'module' }),
     init: 'lazy',
     taskName: 'enhance',
     idleTimeoutMs: 10 * 1000, // Auto-terminate after 10s idle
@@ -108,18 +110,15 @@ const RuntimeObservabilityPage = () => {
     return seconds > 0 ? completed / seconds : null
   }, [completed, durationMs, finishedAt])
 
-  const processImage = useCallback(
-    async (image: ImageData) => {
-      const tasks = tasksRef.current
-      if (!tasks) {
-        throw new Error('Task runtime not initialized')
-      }
-      const resized = await tasks.resize.process(image)
-      const analyzed = await tasks.analyze.process(resized)
-      return tasks.enhance.process(analyzed)
-    },
-    [],
-  )
+  const processImage = useCallback(async (image: ImageData) => {
+    const tasks = tasksRef.current
+    if (!tasks) {
+      throw new Error('Task runtime not initialized')
+    }
+    const resized = await tasks.resize.process(image)
+    const analyzed = await tasks.analyze.process(resized)
+    return tasks.enhance.process(analyzed)
+  }, [])
 
   const handleRun = useCallback(async () => {
     if (status === 'running') return
@@ -167,8 +166,8 @@ const RuntimeObservabilityPage = () => {
       })) {
         if (runIdRef.current !== runId) break
         if (result.status === 'fulfilled') {
-          setCompleted((prev) => prev + 1)
-          setResults((prev) =>
+          setCompleted(prev => prev + 1)
+          setResults(prev =>
             [
               {
                 id: result.value.name,
@@ -176,13 +175,13 @@ const RuntimeObservabilityPage = () => {
                 message: `${result.value.name}: ${result.value.objects.join(', ')}`,
               },
               ...prev,
-            ].slice(0, 6),
+            ].slice(0, 6)
           )
         } else {
-          setFailed((prev) => prev + 1)
+          setFailed(prev => prev + 1)
           const message =
             result.error instanceof Error ? result.error.message : String(result.error)
-          setResults((prev) =>
+          setResults(prev =>
             [
               {
                 id: result.item.name,
@@ -190,7 +189,7 @@ const RuntimeObservabilityPage = () => {
                 message: `${result.item.name}: ${message}`,
               },
               ...prev,
-            ].slice(0, 6),
+            ].slice(0, 6)
           )
         }
       }
@@ -264,7 +263,7 @@ const RuntimeObservabilityPage = () => {
                       value={batchSize}
                       min={1}
                       max={200}
-                      onChange={(event) => setBatchSize(Number(event.target.value))}
+                      onChange={event => setBatchSize(Number(event.target.value))}
                     />
                   </Box>
                   <Box>
@@ -276,7 +275,7 @@ const RuntimeObservabilityPage = () => {
                       value={concurrencyLimit}
                       min={1}
                       max={64}
-                      onChange={(event) => setConcurrencyLimit(Number(event.target.value))}
+                      onChange={event => setConcurrencyLimit(Number(event.target.value))}
                     />
                   </Box>
                 </Stack>
@@ -322,9 +321,7 @@ const RuntimeObservabilityPage = () => {
                     <Text fontSize="sm" color="gray.600">
                       Duration
                     </Text>
-                    <Text fontWeight="semibold">
-                      {(durationMs / 1000).toFixed(1)}s
-                    </Text>
+                    <Text fontWeight="semibold">{(durationMs / 1000).toFixed(1)}s</Text>
                   </HStack>
                   <HStack justify="space-between">
                     <Text fontSize="sm" color="gray.600">
@@ -356,7 +353,7 @@ const RuntimeObservabilityPage = () => {
               </Text>
             ) : (
               <Stack gap={2}>
-                {results.map((result) => (
+                {results.map(result => (
                   <HStack key={result.id} justify="space-between">
                     <Text fontSize="sm" color="gray.700">
                       {result.message}

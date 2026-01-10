@@ -11,7 +11,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": ["core/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist", "demo", "examples"]

@@ -3,17 +3,17 @@
  * All requests queue at this single worker instance
  */
 
-import { wrap, type Remote } from 'comlink'
+import { type Remote, wrap } from 'comlink'
+import { DispatchQueue } from './dispatch-queue'
 import type {
+  CrashPolicy,
   InitMode,
   QueuePolicy,
-  TaskExecutor,
   TaskDispatchOptions,
+  TaskExecutor,
   TelemetrySink,
   WorkerState,
-  CrashPolicy,
 } from './types'
-import { DispatchQueue } from './dispatch-queue'
 import { WorkerCrashedError } from './worker-crash-error'
 
 type WorkerCall = {
@@ -37,6 +37,7 @@ type WorkerCall = {
  * - Constructed via `runtime.defineTask({ type: 'singleton', ... })`.
  * - Configure limits with `maxInFlight` and `maxQueueDepth`.
  */
+// biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped singleton workers
 export class SingletonWorker<T = any> implements TaskExecutor {
   private worker: Remote<T> | null = null
   private workerInstance: Worker | null = null
@@ -77,7 +78,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     queuePolicy: QueuePolicy = 'block',
     crashPolicy: CrashPolicy = 'restart-fail-in-flight',
     crashMaxRetries: number = 3,
-    idleTimeoutMs?: number,
+    idleTimeoutMs?: number
   ) {
     this.createWorker = createWorker
     this.initMode = initMode
@@ -139,7 +140,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
         onActive: () => {
           this.clearIdleTimer()
         },
-      },
+      }
     )
 
     // Eagerly create worker if requested
@@ -171,6 +172,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     if (!this.worker) {
       this.initializeWorker()
     }
+    // biome-ignore lint/style/noNonNullAssertion: initializeWorker() guarantees worker is initialized
     return this.worker!
   }
 
@@ -225,7 +227,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
 
   private async waitForRestart(): Promise<void> {
     if (!this.restartTimer) return
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       this.restartWaiters.push(resolve)
     })
   }
@@ -275,6 +277,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
 
     this.detachCrashListeners()
     if (this.worker) {
+      // biome-ignore lint/suspicious/noExplicitAny: Comlink's releaseProxy is not in public types
       ;(this.worker as any)[Symbol.for('comlink.releaseProxy')]?.()
     }
     if (this.workerInstance) {
@@ -354,6 +357,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
 
     this.dispatchCount++
 
+    // biome-ignore lint/suspicious/noExplicitAny: __dispatch is our custom harness method, not in Comlink types
     const workerDispatch = (worker as any).__dispatch
     if (typeof workerDispatch !== 'function') {
       throw new Error('Worker does not expose __dispatch (atelier harness missing)')
@@ -397,6 +401,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     }
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: Generic task dispatch returns arbitrary worker method results
   async dispatch(method: string, args: unknown[], options?: TaskDispatchOptions): Promise<any> {
     if (this.halted) {
       return Promise.reject(this.haltedError ?? new Error('Task is halted after worker crash'))
@@ -409,19 +414,18 @@ export class SingletonWorker<T = any> implements TaskExecutor {
         args,
         key: options?.key,
       },
-      options,
+      options
     )
   }
 
   getState(): WorkerState {
     const queueState = this.queue.getState()
     const workerStatus = this.crashed ? 'crashed' : this.workerStatus
-    const taskStatus =
-      this.manualPaused
-        ? 'paused'
-        : queueState.inFlight + queueState.pending + queueState.blocked > 0
-          ? 'active'
-          : 'idle'
+    const taskStatus = this.manualPaused
+      ? 'paused'
+      : queueState.inFlight + queueState.pending + queueState.blocked > 0
+        ? 'active'
+        : 'idle'
     return {
       type: 'singleton',
       totalWorkers: 1,
@@ -485,6 +489,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     this.detachCrashListeners()
     if (this.worker) {
       // Comlink proxies have a special [releaseProxy] method
+      // biome-ignore lint/suspicious/noExplicitAny: Comlink's releaseProxy is not in public types
       ;(this.worker as any)[Symbol.for('comlink.releaseProxy')]?.()
       this.worker = null
     }
@@ -524,6 +529,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
   private cancelInFlightCall(callId: string): void {
     const worker = this.worker
     if (!worker) return
+    // biome-ignore lint/suspicious/noExplicitAny: __cancel is our custom harness method, not in Comlink types
     const cancel = (worker as any).__cancel
     if (typeof cancel !== 'function') return
     Promise.resolve()

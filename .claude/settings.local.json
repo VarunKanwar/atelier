@@ -5,7 +5,17 @@
       "mcp__linear-server__list_issues",
       "Bash(bun test:*)",
       "mcp__linear-server__list_teams",
-      "mcp__linear-server__create_issue"
+      "mcp__linear-server__create_issue",
+      "Bash(wc:*)",
+      "Bash(bun run build)",
+      "Bash(bunx npm pack:*)",
+      "Bash(bunx npm view:*)",
+      "Bash(npm --version:*)",
+      "Bash(pnpm --version:*)",
+      "Bash(ls:*)",
+      "Bash(bun run check:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun run prepublishOnly:*)"
     ]
   }
 }
