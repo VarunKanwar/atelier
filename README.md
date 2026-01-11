@@ -111,6 +111,10 @@ await encoder.with({ transferResult: false }).addFrame(frame)
 // Worker's internal cache still has the frame
 ```
 
+Transfers move ownership: the sender’s buffers become detached. Clone first if
+you need to keep the original, or temporarily disable transfer with
+`task.with({ transfer: [] })` to debug “buffer is detached” issues.
+
 **Performance impact:** Zero-copy transfers are ~5,000x-500,000x faster than cloning for large data (1MB-100MB).
 
 **Supported types:** ArrayBuffer, TypedArray.buffer, ImageBitmap, OffscreenCanvas, VideoFrame, AudioData, MessagePort, ReadableStream, WritableStream, TransformStream.

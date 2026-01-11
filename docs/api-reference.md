@@ -90,8 +90,21 @@ type TaskDispatchOptions = {
 ```
 
 Notes:
-- `transfer` defaults to auto-detection when omitted.
-- `transferResult` defaults to `true`.
+- Dispatch options are applied via `task.with(options)` and are not passed to worker handlers.
+- `transfer`:
+  - `undefined` (default): auto-detect using the `transferables` library.
+  - `[]`: explicitly disable transfer (clone everything).
+  - `[buffer1, buffer2, ...]`: explicit list of transferables.
+- Transferred buffers are detached on the sender; clone first if you need to retain data.
+- `transferResult` defaults to `true`; set `false` if the worker needs to retain results.
+
+Auto-detected transferable types include `ArrayBuffer`, `TypedArray.buffer`,
+`ImageBitmap`, `OffscreenCanvas`, `VideoFrame`, `AudioData`, `MessagePort`, and
+stream types (`ReadableStream`, `WritableStream`, `TransformStream`).
+
+Migration note:
+- Manual `comlink.transfer(...)` tagging is still supported but usually unnecessary.
+  Prefer `task.with({ transfer: [...] })` for explicit control.
 
 ## AbortTaskController
 

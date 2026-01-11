@@ -58,12 +58,57 @@ Handlers are expected to cooperate with cancellation by checking
 
 ### Transferables
 
-Atelier auto-detects transferable objects in arguments and results using the
-`transferables` library, enabling zero-copy transfers by default. Explicit
-control is provided via dispatch options:
+Atelier defaults to zero-copy transfer for large payloads to avoid structured
+clone overhead. Transfers are a move of ownership: the sender’s buffers become
+detached (“neutered”), so treat transferred objects as consumed.
 
-- `task.with({ transfer: [...] })` to specify an explicit list (or `[]` to disable)
-- `task.with({ transferResult: false })` to keep results in the worker
+Detection and control:
+- Auto-detect transferables from arguments and results via the `transferables` library.
+- `task.with({ transfer: [...] })` supplies an explicit list; `[]` disables transfer.
+- `task.with({ transferResult: false })` keeps results in the worker.
+
+Auto-detection flow (simplified):
+
+```ts
+const transferables = options?.transfer ?? getTransferables(args)
+const result = await workerDispatch(callId, method, args, transferables)
+
+const shouldTransferResult = options?.transferResult ?? true
+if (shouldTransferResult && result != null) {
+  const resultTransferables = getTransferables(result)
+  if (resultTransferables.length > 0) {
+    transfer(result, resultTransferables)
+  }
+}
+```
+
+Comlink integration:
+- `transfer(obj, list)` tags objects in a `WeakMap`.
+- Comlink uses the tagged list when it performs `postMessage`.
+
+Edge cases and tradeoffs:
+- Circular references are handled by `transferables` via `WeakSet`.
+- Deep nesting is bounded (default depth limit of 10) to cap traversal cost.
+- Shared buffers across args are deduplicated.
+- `SharedArrayBuffer` is not transferable (already shared).
+- Small objects incur minimal overhead; large objects benefit the most.
+
+Default rationale:
+- `transferResult: true` matches typical stateless processing.
+- Stateful workers can opt out with `task.with({ transferResult: false })`.
+
+Performance characteristics (illustrative):
+
+| Data Size | Clone Time | Transfer Time | Savings |
+|-----------|------------|---------------|---------|
+| 1MB       | ~5ms       | ~0.001ms      | 5,000x  |
+| 10MB      | ~50ms      | ~0.001ms      | 50,000x |
+| 100MB     | ~500ms     | ~0.001ms      | 500,000x|
+
+References:
+- [MDN: Transferable Objects](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects)
+- [transferables library](https://github.com/okikio/transferables)
+- [Comlink transfer documentation](https://github.com/GoogleChromeLabs/comlink#transfer-handlers-and-event-listeners)
 
 ### Worker crash recovery
 
