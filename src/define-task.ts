@@ -61,7 +61,7 @@ export function createDefineTask(context: DefineTaskContext) {
       type,
       worker: createWorker,
       init = 'lazy',
-      poolSize = navigator.hardwareConcurrency || 4,
+      poolSize: providedPoolSize,
       telemetry,
       taskName,
       taskId,
@@ -74,6 +74,8 @@ export function createDefineTask(context: DefineTaskContext) {
       crashPolicy,
       crashMaxRetries,
     } = config
+
+    const poolSize = providedPoolSize ?? getDefaultPoolSize()
 
     // Stable ID for telemetry; auto-generated if not provided.
     const resolvedTaskId = taskId ?? `task-${globalTaskId++}`
@@ -267,6 +269,15 @@ const resolveKey = (
   if (typeof key !== 'string') return undefined
   if (key.length === 0) return undefined
   return key
+}
+
+const getDefaultPoolSize = () => {
+  if (typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number') {
+    if (navigator.hardwareConcurrency > 0) {
+      return navigator.hardwareConcurrency
+    }
+  }
+  return 4
 }
 
 const buildDispatchSignal = (
