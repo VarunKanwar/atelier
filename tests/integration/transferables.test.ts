@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import { transfer } from 'comlink'
 import { getTransferables } from 'transferables'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function pushTransferable(value: unknown, transferables: Transferable[]) {
   if (value instanceof ArrayBuffer) {
