@@ -13,6 +13,7 @@ export type Task<T> = Remote<T> & {
   // Add internal properties for observability
   __executor: TaskExecutor
   __config: TaskConfig
+  with: (options: TaskDispatchOptions) => Task<T>
   getState(): ReturnType<TaskExecutor['getState']>
   startWorkers(): void
   stopWorkers(): void
@@ -60,7 +61,7 @@ export function createDefineTask(context: DefineTaskContext) {
       type,
       worker: createWorker,
       init = 'lazy',
-      poolSize = navigator.hardwareConcurrency || 4,
+      poolSize: providedPoolSize,
       telemetry,
       taskName,
       taskId,
@@ -73,6 +74,8 @@ export function createDefineTask(context: DefineTaskContext) {
       crashPolicy,
       crashMaxRetries,
     } = config
+
+    const poolSize = providedPoolSize ?? getDefaultPoolSize()
 
     // Stable ID for telemetry; auto-generated if not provided.
     const resolvedTaskId = taskId ?? `task-${globalTaskId++}`
@@ -124,88 +127,118 @@ export function createDefineTask(context: DefineTaskContext) {
       executor,
     })
 
-    // Create a proxy that intercepts method calls and forwards to the executor.
-    const proxy = new Proxy({} as Task<T>, {
-      get(_target, prop: string | symbol) {
-        // Avoid thenable behavior when tasks are passed to Promise resolution.
-        if (prop === 'then') {
-          return undefined
-        }
-        // Expose internal executor for debugging
-        if (prop === '__executor') {
-          return executor
+    const disposeTask = () => {
+      try {
+        executor.dispose()
+      } finally {
+        disposed = true
+        unregister?.()
+        unregister = null
+      }
+    }
+
+    const buildDispatchEnvelope = (
+      args: unknown[],
+      baseOptions?: TaskDispatchOptions
+    ): { options: TaskDispatchOptions; cleanup?: () => void } => {
+      const resolvedKey = resolveKey(keyOf, args)
+      const keySignal = resolvedKey ? context.abortTaskController.signalFor(resolvedKey) : undefined
+      const { signal, cleanup } = buildDispatchSignal(keySignal, timeoutMs)
+      const options: TaskDispatchOptions = {
+        ...(signal || resolvedKey ? { signal, key: resolvedKey } : {}),
+        ...(baseOptions ?? {}),
+      }
+      return { options, cleanup }
+    }
+
+    const createMethodInvoker = (method: string, baseOptions?: TaskDispatchOptions) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Proxy handler intercepts arbitrary method calls
+      return (...args: any[]) => {
+        if (disposed) {
+          return Promise.reject(createDisposedError())
         }
 
-        // Expose config for debugging
-        if (prop === '__config') {
-          return config
+        const { options, cleanup } = buildDispatchEnvelope(args, baseOptions)
+
+        let dispatchPromise: Promise<unknown>
+        try {
+          dispatchPromise = executor.dispatch(method, args, options)
+        } catch (error) {
+          cleanup?.()
+          return Promise.reject(error)
         }
 
-        // Expose state getter
-        if (prop === 'getState') {
-          return () => executor.getState()
+        if (!cleanup) {
+          return dispatchPromise
         }
 
-        if (prop === 'startWorkers') {
-          return () => executor.startWorkers()
-        }
+        return dispatchPromise.finally(() => {
+          cleanup()
+        })
+      }
+    }
 
-        if (prop === 'stopWorkers') {
-          return () => executor.stopWorkers()
-        }
+    const resolveProxyProperty = (
+      prop: string | symbol,
+      baseOptions?: TaskDispatchOptions
+    ): unknown => {
+      // Expose internal executor for debugging
+      if (prop === '__executor') {
+        return executor
+      }
 
-        // Expose dispose method
-        if (prop === 'dispose') {
-          return () => {
-            try {
-              executor.dispose()
-            } finally {
-              disposed = true
-              unregister?.()
-              unregister = null
-            }
+      // Expose config for debugging
+      if (prop === '__config') {
+        return config
+      }
+
+      if (prop === 'with') {
+        return (options: TaskDispatchOptions) =>
+          createTaskProxy(mergeDispatchOptions(baseOptions, options))
+      }
+
+      // Expose state getter
+      if (prop === 'getState') {
+        return () => executor.getState()
+      }
+
+      if (prop === 'startWorkers') {
+        return () => executor.startWorkers()
+      }
+
+      if (prop === 'stopWorkers') {
+        return () => executor.stopWorkers()
+      }
+
+      // Expose dispose method
+      if (prop === 'dispose') {
+        return disposeTask
+      }
+
+      // All other properties are assumed to be worker methods.
+      if (typeof prop === 'string') {
+        return createMethodInvoker(prop, baseOptions)
+      }
+
+      return undefined
+    }
+
+    const createTaskProxy = (baseOptions?: TaskDispatchOptions): Task<T> => {
+      // Create a proxy that intercepts method calls and forwards to the executor.
+      const proxy = new Proxy({} as Task<T>, {
+        get(_target, prop: string | symbol) {
+          // Avoid thenable behavior when tasks are passed to Promise resolution.
+          if (prop === 'then') {
+            return undefined
           }
-        }
+          return resolveProxyProperty(prop, baseOptions)
+        },
+      })
 
-        // All other properties are assumed to be worker methods.
-        if (typeof prop === 'string') {
-          // biome-ignore lint/suspicious/noExplicitAny: Proxy handler intercepts arbitrary method calls
-          return (...args: any[]) => {
-            if (disposed) {
-              return Promise.reject(createDisposedError())
-            }
+      return proxy
+    }
 
-            const resolvedKey = resolveKey(keyOf, args)
-            const keySignal = resolvedKey
-              ? context.abortTaskController.signalFor(resolvedKey)
-              : undefined
-            const { signal, cleanup: signalCleanup } = buildDispatchSignal(keySignal, timeoutMs)
-            const options: TaskDispatchOptions | undefined =
-              signal || resolvedKey ? { signal, key: resolvedKey } : undefined
-
-            let dispatchPromise: Promise<unknown>
-            try {
-              dispatchPromise = executor.dispatch(prop, args, options)
-            } catch (error) {
-              signalCleanup?.()
-              return Promise.reject(error)
-            }
-
-            if (!signalCleanup) {
-              return dispatchPromise
-            }
-
-            return dispatchPromise.finally(() => {
-              signalCleanup()
-            })
-          }
-        }
-
-        return undefined
-      },
-    })
-
-    return proxy
+    return createTaskProxy()
   }
 }
 
@@ -217,6 +250,16 @@ const createDisposedError = () => {
   return error
 }
 
+const mergeDispatchOptions = (
+  base?: TaskDispatchOptions,
+  next?: TaskDispatchOptions
+): TaskDispatchOptions | undefined => {
+  if (!base && !next) return undefined
+  if (!base) return next
+  if (!next) return base
+  return { ...base, ...next }
+}
+
 const resolveKey = (
   keyOf: TaskConfig['keyOf'] | undefined,
   args: unknown[]
@@ -226,6 +269,15 @@ const resolveKey = (
   if (typeof key !== 'string') return undefined
   if (key.length === 0) return undefined
   return key
+}
+
+const getDefaultPoolSize = () => {
+  if (typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number') {
+    if (navigator.hardwareConcurrency > 0) {
+      return navigator.hardwareConcurrency
+    }
+  }
+  return 4
 }
 
 const buildDispatchSignal = (

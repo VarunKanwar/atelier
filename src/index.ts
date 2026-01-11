@@ -37,6 +37,7 @@ export type {
   CrashPolicy,
   InitMode,
   TaskConfig,
+  TaskDispatchOptions,
   TaskEvent,
   TaskEventType,
   TaskType,
