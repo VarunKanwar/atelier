@@ -35,11 +35,15 @@ Both executors share a `DispatchQueue` that enforces:
 
 ### Dispatch flow
 
-1. Caller invokes `task.method(...)` on the main thread.
-2. `defineTask` derives a cancellation key (if `keyOf` is set).
-3. A dispatch signal is composed from key-based cancellation and `timeoutMs`.
-4. The executor enqueues the dispatch via `DispatchQueue`.
-5. The executor calls the worker harness method `__dispatch(callId, method, args, key)`.
+1. Caller optionally scopes dispatch options via `task.with(options)`.
+2. Caller invokes `task.method(...)` on the main thread.
+3. `defineTask` derives a cancellation key (if `keyOf` is set).
+4. A dispatch signal is composed from key-based cancellation and `timeoutMs`.
+5. The executor enqueues the dispatch via `DispatchQueue`.
+6. The executor calls the worker harness method `__dispatch(callId, method, args, key)`.
+
+Dispatch options are not passed to worker handlers; they remain part of the
+runtime envelope (transfer policy, cancellation, tracing, etc.).
 
 ### Worker harness
 
@@ -51,6 +55,15 @@ The worker harness created by `createTaskWorker(handlers)` provides:
 
 Handlers are expected to cooperate with cancellation by checking
 `ctx.signal` or calling `ctx.throwIfAborted()`.
+
+### Transferables
+
+Atelier auto-detects transferable objects in arguments and results using the
+`transferables` library, enabling zero-copy transfers by default. Explicit
+control is provided via dispatch options:
+
+- `task.with({ transfer: [...] })` to specify an explicit list (or `[]` to disable)
+- `task.with({ transferResult: false })` to keep results in the worker
 
 ### Worker crash recovery
 

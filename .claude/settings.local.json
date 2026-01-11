@@ -15,7 +15,11 @@
       "Bash(ls:*)",
       "Bash(bun run check:*)",
       "Bash(bun run typecheck:*)",
-      "Bash(bun run prepublishOnly:*)"
+      "Bash(bun run prepublishOnly:*)",
+      "mcp__linear-server__get_issue",
+      "mcp__linear-server__list_comments",
+      "mcp__linear-server__update_issue",
+      "Bash(bun install:*)"
     ]
   }
 }

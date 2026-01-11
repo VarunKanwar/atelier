@@ -59,6 +59,7 @@ const task = runtime.defineTask<MyWorkerAPI>({ ... })
 Methods:
 
 - worker methods (proxied via Comlink)
+- `with(options: TaskDispatchOptions): Task<T>`
 - `getState(): WorkerState`
 - `startWorkers(): void`
 - `stopWorkers(): void`
@@ -66,6 +67,31 @@ Methods:
 
 Note: Tasks intentionally do not expose a `then` property to avoid thenable
 behavior when passed to Promise resolution.
+Note: `with` is reserved on tasks for dispatch options.
+
+Dispatch options are applied out-of-band via `task.with(options)` and are not
+passed to worker handlers.
+
+Example:
+
+```ts
+await resize.with({ transfer: [image.data.buffer] }).process(image)
+```
+
+## TaskDispatchOptions
+
+```ts
+type TaskDispatchOptions = {
+  key?: string
+  signal?: AbortSignal
+  transfer?: Transferable[]
+  transferResult?: boolean
+}
+```
+
+Notes:
+- `transfer` defaults to auto-detection when omitted.
+- `transferResult` defaults to `true`.
 
 ## AbortTaskController
 

@@ -6,58 +6,46 @@ This document specifies automatic zero-copy transfers for Atelier, enabling high
 
 ## Problem
 
-By default, `postMessage` **clones** data when sending to workers:
+Comlink uses `postMessage` under the hood to send data between the main thread and workers. By default, `postMessage` **clones** data when sending to workers:
 
 ```ts
 const imageData = ctx.getImageData(0, 0, 1920, 1080); // 10MB
 worker.postMessage({ image: imageData });
-// ❌ Clones 10MB (~50ms)
-// ❌ Doubles memory usage (10MB → 20MB)
+// Doubles memory usage (10MB → 20MB) and increases latency
 ```
 
 For large data, this kills performance. Web Workers support **transferring** instead:
 
 ```ts
 worker.postMessage({ image: imageData }, [imageData.data.buffer]);
-// ✅ Zero-copy transfer (~0.001ms)
-// ✅ No extra memory
+// Zero-copy transfer (~0.001ms)
+// No extra memory
 // ⚠️ imageData.data.buffer is now "neutered" (empty)
 ```
 
-**Challenge:** Users need to manually specify what to transfer, which is error-prone.
+But manually managing transfer lists is tedious and error-prone. Users must track which objects are transferable and ensure they don't use neutered objects afterward.
 
 ## Solution
 
 **Automatic detection with explicit control**: Atelier automatically detects transferable objects using the `transferables` library, with an explicit escape hatch for full control.
 
-## What is "Neutering"?
-
-When an object is **transferred**, it becomes **neutered** (technically "detached"):
-
-```ts
-const buffer = new Uint8Array([1, 2, 3]).buffer;
-console.log(buffer.byteLength); // 3
-
-worker.postMessage({ data: buffer }, [buffer]);
-
-console.log(buffer.byteLength); // 0 (neutered!)
-// The buffer is now empty and unusable
-```
-
-**Think of it like handing someone physical cash** - you don't have it anymore.
-
-**For worker results:**
-- Worker creates result → transfers to main → **worker's copy is neutered**
-- Main thread receives and owns the result ✅
-
-This is the correct behavior for zero-copy performance.
-
 ## API Specification
+
+### Dispatch Options Placement
+
+Dispatch options are provided out-of-band via `task.with(options)`, not as part of
+worker arguments. This keeps handler signatures clean and avoids ambiguous
+argument-order heuristics while preserving per-call flexibility.
+
+- **Task args**: data your worker handlers receive.
+- **Dispatch options**: envelope metadata used by the runtime (transfer policy,
+  cancellation, timeouts, tracing, etc.).
+- **Task config**: static, set once in `defineTask(...)`.
 
 ### Task Dispatch Options
 
 ```ts
-type DispatchOptions = {
+type TaskDispatchOptions = {
   /**
    * Transferable objects to transfer (zero-copy) instead of cloning.
    *
@@ -68,7 +56,7 @@ type DispatchOptions = {
    * When transferring, the original object becomes "neutered" (unusable).
    * If you need to keep the original, clone it first:
    *   const clone = structuredClone(data);
-   *   await task.method(clone, { transfer: [clone.buffer] });
+   *   await task.with({ transfer: [clone.buffer] }).method(clone);
    */
   transfer?: Transferable[]
 
@@ -85,6 +73,20 @@ type DispatchOptions = {
 }
 ```
 
+Dispatch options are applied via `task.with(options)`:
+
+```ts
+const result = await resize.with({ transfer: [image.data.buffer] }).process(image)
+```
+
+The returned proxy can be reused for multiple calls when options are stable:
+
+```ts
+const noTransfer = resize.with({ transfer: [] })
+await noTransfer.process(imageA)
+await noTransfer.process(imageB)
+```
+
 ### Usage
 
 ```ts
@@ -94,7 +96,7 @@ const result = await resize.process(imageData);
 // Fast, zero-copy both ways
 
 // Example 2: Explicitly disable transfer
-const result = await resize.process(imageData, { transfer: [] });
+const result = await resize.with({ transfer: [] }).process(imageData);
 // Clones imageData (~50ms for 10MB)
 // Original imageData remains usable
 
@@ -102,16 +104,15 @@ const result = await resize.process(imageData, { transfer: [] });
 const lookupTable = new Float32Array(1000);
 
 for (const image of images) {
-  await process(image, lookupTable, {
-    transfer: [image.data.buffer] // Transfer image, NOT lookup table
-  });
+  await colorCorrect.with({ transfer: [image.data.buffer] }).process(
+    image,
+    lookupTable
+  );
   // lookupTable remains usable for next iteration
 }
 
 // Example 4: Worker keeps result (rare)
-await encoder.addFrame(frame, {
-  transferResult: false
-});
+await encoder.with({ transferResult: false }).addFrame(frame);
 // Worker's internal cache still has the frame
 ```
 
@@ -133,8 +134,8 @@ Using the `transferables` library, we detect:
 ### Auto-detection Flow
 
 ```ts
-// When user calls task method:
-async dispatch(method: string, args: unknown[], options?: DispatchOptions) {
+// When user calls task method via task.with(options):
+async dispatch(method: string, args: unknown[], options?: TaskDispatchOptions) {
   // 1. Determine transferables for arguments
   const transferables = options?.transfer ?? getTransferables(args)
 
@@ -204,9 +205,9 @@ loadColorLookupTable(colorLUT);
 
 // Process many images with same LUT
 for (const image of images) {
-  const corrected = await colorCorrect.process(image, colorLUT, {
-    transfer: [image.data.buffer] // Only transfer image, not LUT
-  });
+  const corrected = await colorCorrect
+    .with({ transfer: [image.data.buffer] })
+    .process(image, colorLUT);
 }
 // colorLUT still intact for next batch
 ```
@@ -223,16 +224,14 @@ const handlers = {
 };
 
 // Main thread
-await encoder.addFrame(frame, {
-  transferResult: false // Worker needs to keep the frame
-});
+await encoder.with({ transferResult: false }).addFrame(frame);
 ```
 
 ### Explicit Control (Debugging)
 
 ```ts
 // Disable transfers to debug neutering issues
-const result = await task.process(data, { transfer: [] });
+const result = await task.with({ transfer: [] }).process(data);
 
 // After processing, data is still usable
 console.log(data.buffer.byteLength); // Still has data
@@ -277,7 +276,8 @@ Auto-detection has minimal overhead for primitives/small objects:
 `transferResult: true` is the right default because:
 - Most processing is stateless (worker doesn't need result after return)
 - Matches the common pattern: process → return → discard
-- Users working with stateful workers will know to opt-out
+- Users working with stateful workers will know to opt-out via
+  `task.with({ transferResult: false })`
 
 ## Performance Characteristics
 
@@ -291,7 +291,7 @@ Transfer is essentially O(1), while clone is O(n) with data size.
 
 ## Migration Path
 
-Existing code works unchanged (auto-transfer is transparent):
+Auto-transfer works unchanged (it's transparent):
 
 ```ts
 // Before: Manual Comlink transfer
@@ -302,8 +302,11 @@ await task.process(transfer(image, [image.data.buffer]));
 await task.process(image);
 
 // If manual control needed: Explicit list
-await task.process(image, { transfer: [image.data.buffer] });
+await task.with({ transfer: [image.data.buffer] }).process(image);
 ```
+
+Note: Explicit dispatch options are applied via `task.with(...)`, not as a
+trailing argument.
 
 ## Documentation Requirements
 
