@@ -3,7 +3,8 @@
  * All requests queue at this single worker instance
  */
 
-import { type Remote, wrap } from 'comlink'
+import { type Remote, transfer, wrap } from 'comlink'
+import { getTransferables } from 'transferables'
 import { DispatchQueue } from './dispatch-queue'
 import type {
   CrashPolicy,
@@ -21,6 +22,8 @@ type WorkerCall = {
   method: string
   args: unknown[]
   key?: string
+  transfer?: Transferable[]
+  transferResult?: boolean
 }
 
 /**
@@ -363,6 +366,12 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       throw new Error('Worker does not expose __dispatch (atelier harness missing)')
     }
 
+    // Auto-detect or use explicit transferables for arguments
+    const argTransferables =
+      payload.transfer !== undefined ? payload.transfer : getTransferables(payload.args)
+    const argsToSend =
+      argTransferables.length > 0 ? transfer(payload.args, argTransferables) : payload.args
+
     const start = Date.now()
     this.telemetry?.({
       type: 'dispatch',
@@ -374,7 +383,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     })
 
     try {
-      const result = await workerDispatch(payload.callId, payload.method, payload.args, payload.key)
+      const result = await workerDispatch(payload.callId, payload.method, argsToSend, payload.key)
       const durationMs = Date.now() - start
       this.telemetry?.({
         type: 'success',
@@ -385,6 +394,15 @@ export class SingletonWorker<T = any> implements TaskExecutor {
         durationMs,
       })
       this.resetCrashTracking()
+
+      // Auto-detect or skip transferables for result
+      const shouldTransferResult = payload.transferResult ?? true
+      if (shouldTransferResult && result != null) {
+        const resultTransferables = getTransferables(result)
+        if (resultTransferables.length > 0) {
+          return transfer(result, resultTransferables)
+        }
+      }
       return result
     } catch (error) {
       const durationMs = Date.now() - start
@@ -413,6 +431,8 @@ export class SingletonWorker<T = any> implements TaskExecutor {
         method,
         args,
         key: options?.key,
+        transfer: options?.transfer,
+        transferResult: options?.transferResult,
       },
       options
     )

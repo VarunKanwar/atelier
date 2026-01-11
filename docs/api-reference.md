@@ -59,6 +59,7 @@ const task = runtime.defineTask<MyWorkerAPI>({ ... })
 Methods:
 
 - worker methods (proxied via Comlink)
+- `with(options: TaskDispatchOptions): Task<T>`
 - `getState(): WorkerState`
 - `startWorkers(): void`
 - `stopWorkers(): void`
@@ -66,6 +67,44 @@ Methods:
 
 Note: Tasks intentionally do not expose a `then` property to avoid thenable
 behavior when passed to Promise resolution.
+Note: `with` is reserved on tasks for dispatch options.
+
+Dispatch options are applied out-of-band via `task.with(options)` and are not
+passed to worker handlers.
+
+Example:
+
+```ts
+await resize.with({ transfer: [image.data.buffer] }).process(image)
+```
+
+## TaskDispatchOptions
+
+```ts
+type TaskDispatchOptions = {
+  key?: string
+  signal?: AbortSignal
+  transfer?: Transferable[]
+  transferResult?: boolean
+}
+```
+
+Notes:
+- Dispatch options are applied via `task.with(options)` and are not passed to worker handlers.
+- `transfer`:
+  - `undefined` (default): auto-detect using the `transferables` library.
+  - `[]`: explicitly disable transfer (clone everything).
+  - `[buffer1, buffer2, ...]`: explicit list of transferables.
+- Transferred buffers are detached on the sender; clone first if you need to retain data.
+- `transferResult` defaults to `true`; set `false` if the worker needs to retain results.
+
+Auto-detected transferable types include `ArrayBuffer`, `TypedArray.buffer`,
+`ImageBitmap`, `OffscreenCanvas`, `VideoFrame`, `AudioData`, `MessagePort`, and
+stream types (`ReadableStream`, `WritableStream`, `TransformStream`).
+
+Migration note:
+- Manual `comlink.transfer(...)` tagging is still supported but usually unnecessary.
+  Prefer `task.with({ transfer: [...] })` for explicit control.
 
 ## AbortTaskController
 

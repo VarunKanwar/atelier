@@ -85,6 +85,26 @@ export interface TaskExecutor {
 export type TaskDispatchOptions = {
   key?: string
   signal?: AbortSignal
+  /**
+   * Transferable objects to transfer (zero-copy) instead of cloning.
+   *
+   * - undefined (default): Auto-detect using transferables library
+   * - []: Explicitly disable transfer (clone everything)
+   * - [buffer1, buffer2, ...]: Explicit list of transferables
+   *
+   * When transferring, the original object becomes "neutered" (unusable).
+   * Use `task.with({ transfer: [...] })` to apply per-call transfer options.
+   */
+  transfer?: Transferable[]
+  /**
+   * Whether to transfer the result back from worker to main thread.
+   *
+   * - true (default): Transfer result (zero-copy, worker loses result)
+   * - false: Clone result (worker keeps copy)
+   *
+   * Apply via `task.with({ transferResult: false })`.
+   */
+  transferResult?: boolean
 }
 
 // Minimal event set to power lightweight observability.
