@@ -1,5 +1,3 @@
-import { transfer } from 'comlink'
-import { getTransferables } from 'transferables'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 function pushTransferable(value: unknown, transferables: Transferable[]) {
@@ -32,19 +30,22 @@ function detectTransferables(obj: unknown): Transferable[] {
   return transferables
 }
 
+const { mockTransfer, mockGetTransferables } = vi.hoisted(() => {
+  const mockTransfer = vi.fn((obj, _transferables) => obj)
+  const mockGetTransferables = vi.fn((obj: unknown) => detectTransferables(obj))
+  return { mockTransfer, mockGetTransferables }
+})
+
 // Mock comlink with transfer support
 vi.mock('comlink', () => ({
   wrap: (worker: unknown) => worker,
-  transfer: vi.fn((obj, _transferables) => obj),
+  transfer: mockTransfer,
 }))
 
 // Mock transferables library
 vi.mock('transferables', () => ({
-  getTransferables: vi.fn((obj: unknown) => detectTransferables(obj)),
+  getTransferables: mockGetTransferables,
 }))
-
-const mockTransfer = vi.mocked(transfer)
-const mockGetTransferables = vi.mocked(getTransferables)
 
 import { createTaskRuntime } from '../../src/runtime'
 import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
