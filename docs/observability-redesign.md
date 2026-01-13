@@ -62,7 +62,7 @@ Spans are a natural fit for `performance.measure()`:
 - This span includes queue wait and retries, and ends even if canceled or rejected before dispatch.
 - Measures are emitted on the main thread only.
 
-**Measure name**: `atelier:span`  
+**Measure name**: `atelier:span` (no per-span suffix)
 **Measure detail** (task spans):
 
 ```ts
@@ -89,6 +89,7 @@ Spans are a natural fit for `performance.measure()`:
 - `detail` is optional. If a browser does not preserve `PerformanceMeasure.detail`,
   the measure may still be created without it. `SpanEvent` remains the canonical
   source of span metadata.
+- `SpanEvent` mirrors the measure detail fields and adds `durationMs`.
 
 **Span identity**
 - `spanId` is stable per call; we can reuse `callId` to avoid duplicate IDs.
@@ -224,6 +225,7 @@ read `SpanEvent` from `subscribeEvents()`. Trace durations are emitted as
 We provide **explicit trace context** only:
 
 - `runtime.createTrace(name?)` returns a `TraceContext { id, name, sampled, end }`.
+- `TraceContext.id` is used as `traceId` in span/trace measures and events.
 - `runtime.runWithTrace(name, fn)` creates a trace, passes it to `fn`, and
   calls `trace.end()` automatically (with `status: 'ok' | 'error'`).
 - `task.with({ trace })` is the only supported way to attach trace context.
@@ -265,7 +267,7 @@ We align the observability model to common OpenTelemetry (OTel) concepts without
 bundling OTel:
 
 - **Trace**: a single workflow instance (e.g., one document processed end-to-end).
-- **Span**: one task call from enqueue → completion (SpanKind.INTERNAL).
+- **Span**: one task call from dispatch request → completion (SpanKind.INTERNAL).
 - **Status mapping**:
   - `ok` → OTel `OK`
   - `canceled` → OTel `UNSET` with `canceled=true` attribute
@@ -408,6 +410,14 @@ Gauges:
 Histograms:
 - `task.duration_ms` (end-to-end span duration)
 - `queue.wait_ms` (per dispatch attempt; total wait is in span detail)
+
+**Metric attributes (required when applicable)**
+- `task.id` (required for all task-scoped metrics)
+- `task.type` (required for all task-scoped metrics)
+- `task.name` (optional)
+- `worker.index` (required for worker-scoped metrics)
+- `queue.policy` (required for queue-scoped metrics)
+- `queue.max_in_flight`, `queue.max_depth` (optional)
 
 ## Emission Points (Implementation Mapping)
 
