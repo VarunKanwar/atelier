@@ -205,6 +205,58 @@ If you only care about system health, skip trace creation and rely on:
 - OTel metrics
 - `getRuntimeSnapshot()` for current state
 
+## User Experience (Concrete Example)
+
+This is the minimal setup needed to make OTel output useful in a browser app.
+Atelier emits spans/metrics, but **you must configure the OTel SDK and exporters**
+to actually store or view them.
+
+### 1) App-level OTel setup (traces + metrics)
+
+```ts
+import { WebTracerProvider } from '@opentelemetry/sdk-trace-web'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http'
+
+const tracerProvider = new WebTracerProvider()
+tracerProvider.addSpanProcessor(
+  new BatchSpanProcessor(new OTLPTraceExporter({ url: 'https://your-collector/v1/traces' }))
+)
+tracerProvider.register()
+
+const meterProvider = new MeterProvider()
+meterProvider.addMetricReader(
+  new PeriodicExportingMetricReader({
+    exporter: new OTLPMetricExporter({ url: 'https://your-collector/v1/metrics' }),
+  })
+)
+
+const tracer = tracerProvider.getTracer('atelier')
+const meter = meterProvider.getMeter('atelier')
+```
+
+### 2) Create the runtime with OTel handles
+
+```ts
+import { createTaskRuntime } from '@varunkanwar/atelier'
+
+const runtime = createTaskRuntime({ otel: { tracer, meter } })
+```
+
+### 3) Use traces for per-workflow visibility
+
+```ts
+const trace = runtime.createTrace('doc:123')
+await normalize.with({ trace }).run(doc)
+await resize.with({ trace }).process(doc)
+trace.end()
+```
+
+If you do **not** configure the OTel SDK/exporters, spans and metrics will be
+created but **nothing will store or export them**.
+
 ## Migration Notes (from non-OTel observability)
 
 - Replace `createTelemetryStore()` with OTel metrics aggregation.

@@ -234,6 +234,59 @@ rely on:
 - `getRuntimeSnapshot()` for current queue/worker state
 - `subscribeEvents()` for metrics aggregation
 
+## User Experience (Concrete Example)
+
+Below is a minimal, practical setup that produces:
+- **Spans** (per-call latency) via the Performance API
+- **Metrics** (queue depth, drops, worker lifecycle) via `subscribeEvents()`
+- **Current state** via `getRuntimeSnapshot()`
+
+```ts
+import { createTaskRuntime } from '@varunkanwar/atelier'
+
+type ResizeAPI = {
+  process: (image: ImageData) => Promise<ImageData>
+}
+
+const runtime = createTaskRuntime()
+
+const resize = runtime.defineTask<ResizeAPI>({
+  type: 'parallel',
+  poolSize: 2,
+  worker: () => new Worker(new URL('./resize.worker.ts', import.meta.url), { type: 'module' }),
+})
+
+// 1) Spans: observe per-call latency via PerformanceObserver
+const observer = new PerformanceObserver(list => {
+  for (const entry of list.getEntries()) {
+    if (entry.name.startsWith('atelier:span:')) {
+      // entry.detail has span metadata (if supported by the browser)
+      // fallback: use span events from subscribeEvents (below)
+    }
+  }
+})
+observer.observe({ entryTypes: ['measure'], buffered: true })
+
+// 2) Metrics: subscribe to raw events (counters, gauges, histograms, spans)
+runtime.subscribeEvents(event => {
+  if (event.kind === 'gauge' && event.name === 'queue.pending') {
+    // track queue depth over time
+  }
+  if (event.kind === 'span' && event.status === 'error') {
+    // reliable span data even if Performance entries are dropped
+  }
+})
+
+// 3) Current state: pull snapshots when needed
+const state = runtime.getRuntimeSnapshot()
+// state.tasks[...] includes queue + worker status
+
+// 4) Trace a single workflow instance (recommended)
+const trace = runtime.createTrace('doc:123')
+const result = await resize.with({ trace }).process(imageData)
+trace.end?.()
+```
+
 ## Metric Names (Initial Set)
 
 Counters:
