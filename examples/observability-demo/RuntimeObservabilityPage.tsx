@@ -2,18 +2,21 @@ import {
   Badge,
   Box,
   Button,
+  Collapsible,
   Container,
   Heading,
   HStack,
   Input,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
 } from '@chakra-ui/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { createTaskRuntime, parallelLimit, type TaskRuntime } from '../../src'
+import { createTaskRuntime, parallelLimit, type TaskRuntime, type TraceContext } from '../../src'
 import RuntimeObservabilityPanel from './RuntimeObservabilityPanel'
+import { useRuntimeEvents } from './useRuntimeEvents'
 import type { AnalyzeAPI } from './workers/analyze.worker'
 import type { EnhanceAPI } from './workers/enhance.worker'
 import type { ImageData, ResizeAPI } from './workers/resize.worker'
@@ -69,7 +72,13 @@ const clampNumber = (value: number, fallback: number, min: number, max: number):
 }
 
 const RuntimeObservabilityPage = () => {
-  const runtime = useMemo(() => createTaskRuntime(), [])
+  const runtime = useMemo(
+    () =>
+      createTaskRuntime({
+        observability: { spans: { mode: 'on', sampleRate: 1 } },
+      }),
+    []
+  )
   const tasksRef = useRef<ReturnType<typeof createTasks> | null>(null)
   if (!tasksRef.current) {
     tasksRef.current = createTasks(runtime)
@@ -87,7 +96,291 @@ const RuntimeObservabilityPage = () => {
   const [finishedAt, setFinishedAt] = useState<number | null>(null)
   const [results, setResults] = useState<ResultItem[]>([])
   const runIdRef = useRef(0)
+  const { stats: eventStats, reset: resetEvents } = useRuntimeEvents(runtime)
+  const [detailsExpanded, setDetailsExpanded] = useState(false)
+  const traceVisualization = useMemo(() => {
+    const traceId = eventStats.lastTraceId
+    if (!traceId) return null
+    const trace = eventStats.traces.find(item => item.traceId === traceId) ?? eventStats.traces[0]
+    if (!trace) return null
+    const spans = eventStats.spansByTraceId[trace.traceId] ?? []
+    if (spans.length === 0) {
+      return { trace, spans: [] as { span: (typeof spans)[number] }[] }
+    }
 
+    const entries = spans.map(span => {
+      const duration = span.durationMs ?? 0
+      const end = span.ts
+      const start = end - duration
+      return { span, start, end, duration }
+    })
+
+    const minStart = Math.min(...entries.map(entry => entry.start))
+    const maxEnd = Math.max(...entries.map(entry => entry.end))
+    const traceStart = trace.durationMs ? trace.ts - trace.durationMs : minStart
+    const traceEnd = trace.durationMs ? trace.ts : maxEnd
+    const traceDuration = Math.max(1, traceEnd - traceStart)
+
+    const normalized = entries
+      .sort((a, b) => a.start - b.start)
+      .map(entry => {
+        const wait = Math.min(entry.span.queueWaitMs ?? 0, entry.duration)
+        const exec = Math.max(0, entry.duration - wait)
+        const offsetPct = ((entry.start - traceStart) / traceDuration) * 100
+        const widthPct = (entry.duration / traceDuration) * 100
+        const waitPct = entry.duration > 0 ? (wait / entry.duration) * 100 : 0
+        return {
+          span: entry.span,
+          offsetPct,
+          widthPct,
+          waitPct,
+          exec,
+        }
+      })
+
+    return { trace, spans: normalized, traceDuration }
+  }, [eventStats])
+  const resultsContent = (
+    <Stack gap={3}>
+      <HStack justify="space-between">
+        <Text fontWeight="semibold">Recent results</Text>
+        <Badge bg="gray.100" color="gray.700">
+          {results.length} shown
+        </Badge>
+      </HStack>
+      {results.length === 0 ? (
+        <Text fontSize="sm" color="gray.500">
+          Run the demo to see recent completions and errors.
+        </Text>
+      ) : (
+        <Stack gap={2}>
+          {results.map(result => (
+            <HStack key={result.id} justify="space-between">
+              <Text fontSize="sm" color="gray.700">
+                {result.message}
+              </Text>
+              <Badge
+                bg={result.status === 'fulfilled' ? 'green.50' : 'red.50'}
+                color={result.status === 'fulfilled' ? 'green.700' : 'red.700'}
+              >
+                {result.status === 'fulfilled' ? 'ok' : 'error'}
+              </Badge>
+            </HStack>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  )
+  const eventContent = (
+    <Stack gap={4}>
+      <HStack justify="space-between">
+        <Text fontWeight="semibold">Event stream</Text>
+        <Badge bg="gray.100" color="gray.700">
+          Updated {new Date(eventStats.updatedAt).toLocaleTimeString()}
+        </Badge>
+      </HStack>
+
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+        <Stack gap={2}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Counters
+          </Text>
+          {[
+            { name: 'task.dispatch.total', label: 'Dispatched' },
+            { name: 'task.success.total', label: 'Succeeded' },
+            { name: 'task.failure.total', label: 'Failed' },
+            { name: 'task.canceled.total', label: 'Canceled' },
+            { name: 'task.rejected.total', label: 'Rejected' },
+            { name: 'task.requeue.total', label: 'Requeued' },
+            { name: 'worker.crash.total', label: 'Worker crashes' },
+          ].map(item => (
+            <HStack key={item.name} justify="space-between">
+              <Text fontSize="xs" color="gray.500">
+                {item.label}
+              </Text>
+              <Text fontSize="sm" fontWeight="semibold">
+                {eventStats.counters[item.name] ?? 0}
+              </Text>
+            </HStack>
+          ))}
+        </Stack>
+
+        <Stack gap={2}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Latest histograms
+          </Text>
+          <HStack justify="space-between">
+            <Text fontSize="xs" color="gray.500">
+              queue.wait_ms
+            </Text>
+            <Text fontSize="sm" fontWeight="semibold">
+              {eventStats.lastQueueWaitMs !== undefined
+                ? `${eventStats.lastQueueWaitMs.toFixed(0)} ms`
+                : '—'}
+            </Text>
+          </HStack>
+          <HStack justify="space-between">
+            <Text fontSize="xs" color="gray.500">
+              task.duration_ms
+            </Text>
+            <Text fontSize="sm" fontWeight="semibold">
+              {eventStats.lastTaskDurationMs !== undefined
+                ? `${eventStats.lastTaskDurationMs.toFixed(0)} ms`
+                : '—'}
+            </Text>
+          </HStack>
+        </Stack>
+      </SimpleGrid>
+
+      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
+        <Stack gap={2}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Recent spans
+          </Text>
+          {eventStats.spans.length === 0 ? (
+            <Text fontSize="sm" color="gray.500">
+              No spans yet.
+            </Text>
+          ) : (
+            eventStats.spans.map(span => (
+              <HStack key={span.spanId} justify="space-between">
+                <Box>
+                  <Text fontSize="sm" color="gray.700">
+                    {`${span.taskName ?? span.taskId}.${span.method}`}
+                  </Text>
+                  <Text fontSize="xs" color="gray.500">
+                    {span.status}
+                    {span.durationMs ? ` · ${span.durationMs.toFixed(0)} ms` : ''}
+                    {span.queueWaitMs ? ` · wait ${span.queueWaitMs.toFixed(0)} ms` : ''}
+                  </Text>
+                </Box>
+                <Badge
+                  bg={
+                    span.status === 'ok'
+                      ? 'green.50'
+                      : span.status === 'canceled'
+                        ? 'orange.50'
+                        : 'red.50'
+                  }
+                  color={
+                    span.status === 'ok'
+                      ? 'green.700'
+                      : span.status === 'canceled'
+                        ? 'orange.700'
+                        : 'red.700'
+                  }
+                >
+                  {span.status}
+                </Badge>
+              </HStack>
+            ))
+          )}
+        </Stack>
+
+        <Stack gap={2}>
+          <Text fontSize="sm" fontWeight="semibold">
+            Recent traces
+          </Text>
+          {eventStats.traces.length === 0 ? (
+            <Text fontSize="sm" color="gray.500">
+              No traces yet.
+            </Text>
+          ) : (
+            eventStats.traces.map(trace => (
+              <HStack key={trace.traceId} justify="space-between">
+                <Box>
+                  <Text fontSize="sm" color="gray.700">
+                    {trace.traceName ?? trace.traceId}
+                  </Text>
+                  <Text fontSize="xs" color="gray.500">
+                    {trace.status}
+                    {trace.durationMs ? ` · ${trace.durationMs.toFixed(0)} ms` : ''}
+                  </Text>
+                </Box>
+                <Badge
+                  bg={
+                    trace.status === 'ok'
+                      ? 'green.50'
+                      : trace.status === 'canceled'
+                        ? 'orange.50'
+                        : 'red.50'
+                  }
+                  color={
+                    trace.status === 'ok'
+                      ? 'green.700'
+                      : trace.status === 'canceled'
+                        ? 'orange.700'
+                        : 'red.700'
+                  }
+                >
+                  {trace.status}
+                </Badge>
+              </HStack>
+            ))
+          )}
+        </Stack>
+      </SimpleGrid>
+
+      <Stack gap={3}>
+        <HStack justify="space-between">
+          <Text fontSize="sm" fontWeight="semibold">
+            Trace timeline
+          </Text>
+          {traceVisualization?.trace ? (
+            <Badge bg="gray.100" color="gray.700">
+              {traceVisualization.trace.traceName ?? traceVisualization.trace.traceId}
+            </Badge>
+          ) : null}
+        </HStack>
+
+        {!traceVisualization ? (
+          <Text fontSize="sm" color="gray.500">
+            No trace data yet.
+          </Text>
+        ) : traceVisualization.spans.length === 0 ? (
+          <Text fontSize="sm" color="gray.500">
+            Trace captured, no spans recorded.
+          </Text>
+        ) : (
+          <Stack gap={3}>
+            {traceVisualization.spans.map(entry => {
+              const span = entry.span
+              const status =
+                span.status === 'ok'
+                  ? { bg: 'green.400', text: 'green.700' }
+                  : span.status === 'canceled'
+                    ? { bg: 'orange.400', text: 'orange.700' }
+                    : { bg: 'red.400', text: 'red.700' }
+              return (
+                <Stack key={span.spanId} gap={1}>
+                  <HStack justify="space-between" fontSize="xs">
+                    <Text color="gray.600">{`${span.taskName ?? span.taskId}.${span.method}`}</Text>
+                    <Text color="gray.500">{(span.durationMs ?? 0).toFixed(0)} ms</Text>
+                  </HStack>
+                  <Box position="relative" h="10px" bg="gray.100" rounded="full">
+                    <Box
+                      position="absolute"
+                      left={`${entry.offsetPct}%`}
+                      width={`${entry.widthPct}%`}
+                      h="100%"
+                      bg={status.bg}
+                      rounded="full"
+                      overflow="hidden"
+                    >
+                      <Box h="100%" w={`${entry.waitPct}%`} bg="gray.400" opacity={0.5} />
+                    </Box>
+                  </Box>
+                </Stack>
+              )
+            })}
+            <Text fontSize="xs" color="gray.500">
+              Gray segment indicates queue wait time within each span.
+            </Text>
+          </Stack>
+        )}
+      </Stack>
+    </Stack>
+  )
   useEffect(() => {
     return () => {
       const tasks = tasksRef.current
@@ -110,14 +403,20 @@ const RuntimeObservabilityPage = () => {
     return seconds > 0 ? completed / seconds : null
   }, [completed, durationMs, finishedAt])
 
-  const processImage = useCallback(async (image: ImageData) => {
+  const processImage = useCallback(async (image: ImageData, trace?: TraceContext) => {
     const tasks = tasksRef.current
     if (!tasks) {
       throw new Error('Task runtime not initialized')
     }
-    const resized = await tasks.resize.process(image)
-    const analyzed = await tasks.analyze.process(resized)
-    return tasks.enhance.process(analyzed)
+    const resized = trace
+      ? await tasks.resize.with({ trace }).process(image)
+      : await tasks.resize.process(image)
+    const analyzed = trace
+      ? await tasks.analyze.with({ trace }).process(resized)
+      : await tasks.analyze.process(resized)
+    return trace
+      ? await tasks.enhance.with({ trace }).process(analyzed)
+      : await tasks.enhance.process(analyzed)
   }, [])
 
   const handleRun = useCallback(async () => {
@@ -142,64 +441,67 @@ const RuntimeObservabilityPage = () => {
     setResults([])
     setStartedAt(Date.now())
     setFinishedAt(null)
+    resetEvents()
 
     const images = generateImages(resolvedBatch)
     let active = 0
     let maxActive = 0
 
-    const processWithTracking = async (image: ImageData) => {
-      active += 1
-      maxActive = Math.max(maxActive, active)
-      setInFlight(active)
-      setMaxInFlight(maxActive)
-      try {
-        return await processImage(image)
-      } finally {
-        active = Math.max(0, active - 1)
-        setInFlight(active)
-      }
-    }
-
     try {
-      for await (const result of parallelLimit(images, resolvedLimit, processWithTracking, {
-        returnSettled: true,
-      })) {
-        if (runIdRef.current !== runId) break
-        if (result.status === 'fulfilled') {
-          setCompleted(prev => prev + 1)
-          setResults(prev =>
-            [
-              {
-                id: result.value.name,
-                status: 'fulfilled' as const,
-                message: `${result.value.name}: ${result.value.objects.join(', ')}`,
-              },
-              ...prev,
-            ].slice(0, 6)
-          )
-        } else {
-          setFailed(prev => prev + 1)
-          const message =
-            result.error instanceof Error ? result.error.message : String(result.error)
-          setResults(prev =>
-            [
-              {
-                id: result.item.name,
-                status: 'rejected' as const,
-                message: `${result.item.name}: ${message}`,
-              },
-              ...prev,
-            ].slice(0, 6)
-          )
+      await runtime.runWithTrace(`demo-run-${runId}`, async trace => {
+        const processWithTracking = async (image: ImageData) => {
+          active += 1
+          maxActive = Math.max(maxActive, active)
+          setInFlight(active)
+          setMaxInFlight(maxActive)
+          try {
+            return await processImage(image, trace)
+          } finally {
+            active = Math.max(0, active - 1)
+            setInFlight(active)
+          }
         }
-      }
+
+        for await (const result of parallelLimit(images, resolvedLimit, processWithTracking, {
+          returnSettled: true,
+        })) {
+          if (runIdRef.current !== runId) break
+          if (result.status === 'fulfilled') {
+            setCompleted(prev => prev + 1)
+            setResults(prev =>
+              [
+                {
+                  id: result.value.name,
+                  status: 'fulfilled' as const,
+                  message: `${result.value.name}: ${result.value.objects.join(', ')}`,
+                },
+                ...prev,
+              ].slice(0, 6)
+            )
+          } else {
+            setFailed(prev => prev + 1)
+            const message =
+              result.error instanceof Error ? result.error.message : String(result.error)
+            setResults(prev =>
+              [
+                {
+                  id: result.item.name,
+                  status: 'rejected' as const,
+                  message: `${result.item.name}: ${message}`,
+                },
+                ...prev,
+              ].slice(0, 6)
+            )
+          }
+        }
+      })
     } finally {
       if (runIdRef.current === runId) {
         setStatus('done')
         setFinishedAt(Date.now())
       }
     }
-  }, [batchSize, concurrencyLimit, isPaused, processImage, status])
+  }, [batchSize, concurrencyLimit, isPaused, processImage, resetEvents, runtime, status])
 
   const handlePauseToggle = useCallback(() => {
     const tasks = tasksRef.current
@@ -339,35 +641,37 @@ const RuntimeObservabilityPage = () => {
               <RuntimeObservabilityPanel runtime={runtime} intervalMs={250} onlyOnChange />
             </Box>
           </SimpleGrid>
-
           <Box bg="white" borderWidth="1px" borderColor="gray.200" rounded="xl" p={5}>
-            <HStack justify="space-between" mb={3}>
-              <Text fontWeight="semibold">Recent results</Text>
-              <Badge bg="gray.100" color="gray.700">
-                {results.length} shown
-              </Badge>
-            </HStack>
-            {results.length === 0 ? (
-              <Text fontSize="sm" color="gray.500">
-                Run the demo to see recent completions and errors.
-              </Text>
-            ) : (
-              <Stack gap={2}>
-                {results.map(result => (
-                  <HStack key={result.id} justify="space-between">
-                    <Text fontSize="sm" color="gray.700">
-                      {result.message}
+            <Collapsible.Root
+              open={detailsExpanded}
+              onOpenChange={event => setDetailsExpanded(event.open)}
+            >
+              <Tabs.Root defaultValue="results">
+                <HStack justify="space-between" mb={3} gap={3} align="center">
+                  <Tabs.List display="flex" gap={2}>
+                    <Tabs.Trigger value="results">Recent results</Tabs.Trigger>
+                    <Tabs.Trigger value="events">Event stream</Tabs.Trigger>
+                  </Tabs.List>
+                  <Collapsible.Trigger asChild>
+                    <Text fontSize="xs" color="gray.500" cursor="pointer">
+                      {detailsExpanded ? 'Collapse' : 'Expand'}
                     </Text>
-                    <Badge
-                      bg={result.status === 'fulfilled' ? 'green.50' : 'red.50'}
-                      color={result.status === 'fulfilled' ? 'green.700' : 'red.700'}
-                    >
-                      {result.status === 'fulfilled' ? 'ok' : 'error'}
-                    </Badge>
-                  </HStack>
-                ))}
-              </Stack>
-            )}
+                  </Collapsible.Trigger>
+                </HStack>
+
+                <Tabs.Content value="results">
+                  <Collapsible.Content>
+                    <Box pr={2}>{resultsContent}</Box>
+                  </Collapsible.Content>
+                </Tabs.Content>
+
+                <Tabs.Content value="events">
+                  <Collapsible.Content>
+                    <Box pr={2}>{eventContent}</Box>
+                  </Collapsible.Content>
+                </Tabs.Content>
+              </Tabs.Root>
+            </Collapsible.Root>
           </Box>
         </Stack>
       </Container>

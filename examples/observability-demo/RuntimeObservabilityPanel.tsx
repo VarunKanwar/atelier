@@ -1,6 +1,7 @@
 import {
   Badge,
   Box,
+  Collapsible,
   HStack,
   Progress,
   SimpleGrid,
@@ -9,7 +10,7 @@ import {
   Tabs,
   Text,
 } from '@chakra-ui/react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { RuntimeTaskSnapshot, TaskRuntime } from '../../src'
 import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 
@@ -171,6 +172,7 @@ const RuntimeObservabilityPanel = ({
   intervalMs,
   onlyOnChange,
 }: RuntimeObservabilityPanelProps) => {
+  const [expanded, setExpanded] = useState(false)
   const { snapshot, updatedAt } = useRuntimeSnapshot(runtime, {
     intervalMs,
     onlyOnChange,
@@ -185,125 +187,146 @@ const RuntimeObservabilityPanel = ({
   const parallelTasks = tasks.filter(task => task.type === 'parallel')
   const singletonTasks = tasks.filter(task => task.type === 'singleton')
 
+  const tableContent = (
+    <Table.ScrollArea borderWidth="1px" rounded="md">
+      <Table.Root size="sm">
+        <Table.Header>
+          <Table.Row bg="gray.50">
+            <Table.ColumnHeader>Task</Table.ColumnHeader>
+            <Table.ColumnHeader>Type</Table.ColumnHeader>
+            <Table.ColumnHeader>Init</Table.ColumnHeader>
+            <Table.ColumnHeader>Workers</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="end">In flight</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="end">Pending</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="end">Blocked</Table.ColumnHeader>
+            <Table.ColumnHeader>Policy</Table.ColumnHeader>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {tasks.length === 0 ? (
+            <Table.Row>
+              <Table.Cell colSpan={8}>
+                <Text fontSize="sm" color="gray.500">
+                  No tasks registered yet.
+                </Text>
+              </Table.Cell>
+            </Table.Row>
+          ) : (
+            tasks.map(task => (
+              <Table.Row key={task.taskId}>
+                <Table.Cell>
+                  <Text fontWeight="semibold">{task.taskName ?? task.taskId}</Text>
+                  <Text fontSize="xs" color="gray.500">
+                    {task.taskId}
+                  </Text>
+                </Table.Cell>
+                <Table.Cell>
+                  <Badge
+                    bg={task.type === 'parallel' ? 'blue.50' : 'purple.50'}
+                    color={task.type === 'parallel' ? 'blue.700' : 'purple.700'}
+                  >
+                    {task.type}
+                  </Badge>
+                </Table.Cell>
+                <Table.Cell>{task.init}</Table.Cell>
+                <Table.Cell>
+                  {formatCount(task.activeWorkers)}/{formatCount(task.totalWorkers)}
+                </Table.Cell>
+                <Table.Cell textAlign="end">
+                  {formatCount(task.queueDepth)}/{formatLimit(task.maxInFlight)}
+                </Table.Cell>
+                <Table.Cell textAlign="end">
+                  {formatCount(task.pendingQueueDepth)}/{formatLimit(task.maxQueueDepth)}
+                </Table.Cell>
+                <Table.Cell textAlign="end">{formatCount(task.blockedQueueDepth)}</Table.Cell>
+                <Table.Cell>{task.queuePolicy ?? 'block'}</Table.Cell>
+              </Table.Row>
+            ))
+          )}
+        </Table.Body>
+      </Table.Root>
+    </Table.ScrollArea>
+  )
+
+  const graphContent = (
+    <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
+      <Box>
+        <HStack justify="space-between" mb={3}>
+          <Text fontWeight="semibold">Parallel pools</Text>
+          <Badge bg="blue.50" color="blue.700">
+            {parallelTasks.length}
+          </Badge>
+        </HStack>
+        <Stack gap={4}>
+          {parallelTasks.length === 0 ? (
+            <EmptyState label="No parallel tasks registered." />
+          ) : (
+            parallelTasks.map(task => <TaskCard key={task.taskId} task={task} />)
+          )}
+        </Stack>
+      </Box>
+
+      <Box>
+        <HStack justify="space-between" mb={3}>
+          <Text fontWeight="semibold">Singleton workers</Text>
+          <Badge bg="purple.50" color="purple.700">
+            {singletonTasks.length}
+          </Badge>
+        </HStack>
+        <Stack gap={4}>
+          {singletonTasks.length === 0 ? (
+            <EmptyState label="No singleton tasks registered." />
+          ) : (
+            singletonTasks.map(task => <TaskCard key={task.taskId} task={task} />)
+          )}
+        </Stack>
+      </Box>
+    </SimpleGrid>
+  )
+
   return (
     <Box borderWidth="1px" borderColor="gray.200" rounded="xl" p={6} bg="white">
-      <HStack justify="space-between" align="center" mb={4} gap={4}>
-        <Box>
-          <Text fontSize="lg" fontWeight="semibold">
-            {title}
-          </Text>
-          <Text fontSize="xs" color="gray.500">
-            Updated {new Date(updatedAt).toLocaleTimeString()}
-          </Text>
-        </Box>
-        <Badge bg="gray.100" color="gray.700">
-          {tasks.length} task{tasks.length === 1 ? '' : 's'}
-        </Badge>
-      </HStack>
+      <Collapsible.Root open={expanded} onOpenChange={event => setExpanded(event.open)}>
+        <HStack justify="space-between" align="center" mb={4} gap={4}>
+          <Box>
+            <Text fontSize="lg" fontWeight="semibold">
+              {title}
+            </Text>
+            <Text fontSize="xs" color="gray.500">
+              Updated {new Date(updatedAt).toLocaleTimeString()}
+            </Text>
+          </Box>
+          <HStack gap={2}>
+            <Badge bg="gray.100" color="gray.700">
+              {tasks.length} task{tasks.length === 1 ? '' : 's'}
+            </Badge>
+            <Collapsible.Trigger asChild>
+              <Text fontSize="xs" color="gray.500" cursor="pointer">
+                {expanded ? 'Collapse' : 'Expand'}
+              </Text>
+            </Collapsible.Trigger>
+          </HStack>
+        </HStack>
 
-      <Tabs.Root defaultValue="table">
-        <Tabs.List display="flex" gap={2} mb={4}>
-          <Tabs.Trigger value="table">Table</Tabs.Trigger>
-          <Tabs.Trigger value="graph">Graph</Tabs.Trigger>
-        </Tabs.List>
+        <Tabs.Root defaultValue="table">
+          <Tabs.List display="flex" gap={2} mb={4}>
+            <Tabs.Trigger value="table">Table</Tabs.Trigger>
+            <Tabs.Trigger value="graph">Graph</Tabs.Trigger>
+          </Tabs.List>
 
-        <Tabs.Content value="table">
-          <Table.ScrollArea borderWidth="1px" rounded="md">
-            <Table.Root size="sm">
-              <Table.Header>
-                <Table.Row bg="gray.50">
-                  <Table.ColumnHeader>Task</Table.ColumnHeader>
-                  <Table.ColumnHeader>Type</Table.ColumnHeader>
-                  <Table.ColumnHeader>Init</Table.ColumnHeader>
-                  <Table.ColumnHeader>Workers</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">In flight</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Pending</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Blocked</Table.ColumnHeader>
-                  <Table.ColumnHeader>Policy</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {tasks.length === 0 ? (
-                  <Table.Row>
-                    <Table.Cell colSpan={8}>
-                      <Text fontSize="sm" color="gray.500">
-                        No tasks registered yet.
-                      </Text>
-                    </Table.Cell>
-                  </Table.Row>
-                ) : (
-                  tasks.map(task => (
-                    <Table.Row key={task.taskId}>
-                      <Table.Cell>
-                        <Text fontWeight="semibold">{task.taskName ?? task.taskId}</Text>
-                        <Text fontSize="xs" color="gray.500">
-                          {task.taskId}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Badge
-                          bg={task.type === 'parallel' ? 'blue.50' : 'purple.50'}
-                          color={task.type === 'parallel' ? 'blue.700' : 'purple.700'}
-                        >
-                          {task.type}
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell>{task.init}</Table.Cell>
-                      <Table.Cell>
-                        {formatCount(task.activeWorkers)}/{formatCount(task.totalWorkers)}
-                      </Table.Cell>
-                      <Table.Cell textAlign="end">
-                        {formatCount(task.queueDepth)}/{formatLimit(task.maxInFlight)}
-                      </Table.Cell>
-                      <Table.Cell textAlign="end">
-                        {formatCount(task.pendingQueueDepth)}/{formatLimit(task.maxQueueDepth)}
-                      </Table.Cell>
-                      <Table.Cell textAlign="end">{formatCount(task.blockedQueueDepth)}</Table.Cell>
-                      <Table.Cell>{task.queuePolicy ?? 'block'}</Table.Cell>
-                    </Table.Row>
-                  ))
-                )}
-              </Table.Body>
-            </Table.Root>
-          </Table.ScrollArea>
-        </Tabs.Content>
+          <Tabs.Content value="table">
+            <Collapsible.Content>
+              <Box pr={2}>{tableContent}</Box>
+            </Collapsible.Content>
+          </Tabs.Content>
 
-        <Tabs.Content value="graph">
-          <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
-            <Box>
-              <HStack justify="space-between" mb={3}>
-                <Text fontWeight="semibold">Parallel pools</Text>
-                <Badge bg="blue.50" color="blue.700">
-                  {parallelTasks.length}
-                </Badge>
-              </HStack>
-              <Stack gap={4}>
-                {parallelTasks.length === 0 ? (
-                  <EmptyState label="No parallel tasks registered." />
-                ) : (
-                  parallelTasks.map(task => <TaskCard key={task.taskId} task={task} />)
-                )}
-              </Stack>
-            </Box>
-
-            <Box>
-              <HStack justify="space-between" mb={3}>
-                <Text fontWeight="semibold">Singleton workers</Text>
-                <Badge bg="purple.50" color="purple.700">
-                  {singletonTasks.length}
-                </Badge>
-              </HStack>
-              <Stack gap={4}>
-                {singletonTasks.length === 0 ? (
-                  <EmptyState label="No singleton tasks registered." />
-                ) : (
-                  singletonTasks.map(task => <TaskCard key={task.taskId} task={task} />)
-                )}
-              </Stack>
-            </Box>
-          </SimpleGrid>
-        </Tabs.Content>
-      </Tabs.Root>
+          <Tabs.Content value="graph">
+            <Collapsible.Content>
+              <Box pr={2}>{graphContent}</Box>
+            </Collapsible.Content>
+          </Tabs.Content>
+        </Tabs.Root>
+      </Collapsible.Root>
     </Box>
   )
 }
