@@ -13,7 +13,7 @@
  *   - drop-latest: reject newest
  *   - drop-oldest: evict oldest pending entry
  * - A pump loop dispatches work when capacity is available.
- * - Hooks emit telemetry-friendly events (queued/dispatch/reject/cancel).
+ * - Hooks emit observability-friendly events (queued/dispatch/reject/cancel).
  *
  * Usage:
  * - Instantiate with a `run(payload, queueWaitMs)` handler.
@@ -295,7 +295,9 @@ export class DispatchQueue<T> {
     return rejected
   }
 
-  rejectAll(error: Error): { inFlight: T[] } {
+  rejectAll(error: Error): { pending: T[]; blocked: T[]; inFlight: T[] } {
+    const pendingPayloads: T[] = []
+    const blockedPayloads: T[] = []
     const inFlightPayloads: T[] = []
     for (const entry of this.pending.splice(0, this.pending.length)) {
       if (entry.queuedAbortHandler && entry.signal) {
@@ -303,6 +305,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
       entry.reject(error)
+      pendingPayloads.push(entry.payload)
     }
     for (const entry of this.blocked.splice(0, this.blocked.length)) {
       if (entry.queuedAbortHandler && entry.signal) {
@@ -310,6 +313,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
       entry.reject(error)
+      blockedPayloads.push(entry.payload)
     }
     for (const entry of Array.from(this.inFlight)) {
       this.inFlight.delete(entry)
@@ -321,7 +325,7 @@ export class DispatchQueue<T> {
       inFlightPayloads.push(entry.payload)
     }
     this.notifyStateChange()
-    return { inFlight: inFlightPayloads }
+    return { pending: pendingPayloads, blocked: blockedPayloads, inFlight: inFlightPayloads }
   }
 
   isIdle(): boolean {

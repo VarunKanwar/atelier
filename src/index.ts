@@ -26,22 +26,23 @@ export { createTaskRuntime } from './runtime'
 export { SingletonWorker } from './singleton-worker'
 export type { StripTaskContext, TaskContext, TaskHandlerMap } from './task-worker'
 export { createTaskWorker } from './task-worker'
-export {
-  createTelemetryStore,
-  type TaskTelemetrySnapshot,
-  type TelemetrySnapshot,
-  type TelemetryStore,
-  type TelemetryStoreOptions,
-} from './telemetry'
 export type {
   CrashPolicy,
   InitMode,
+  MetricEvent,
+  ObservabilityConfig,
+  RuntimeEvent,
+  SpanErrorKind,
+  SpanEvent,
+  SpanStatus,
+  SpansConfig,
   TaskConfig,
   TaskDispatchOptions,
-  TaskEvent,
-  TaskEventType,
   TaskType,
-  TelemetrySink,
+  TraceContext,
+  TraceEndOptions,
+  TraceEndStatus,
+  TraceEvent,
   WorkerState,
 } from './types'
 export { WorkerCrashedError } from './worker-crash-error'

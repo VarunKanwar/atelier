@@ -6,7 +6,13 @@
 import type { Remote } from 'comlink'
 import type { AbortTaskController } from './abort-task-controller'
 import { SingletonWorker } from './singleton-worker'
-import type { InitMode, TaskConfig, TaskDispatchOptions, TaskExecutor } from './types'
+import type {
+  InitMode,
+  ObservabilityContext,
+  TaskConfig,
+  TaskDispatchOptions,
+  TaskExecutor,
+} from './types'
 import { WorkerPool } from './worker-pool'
 
 export type Task<T> = Remote<T> & {
@@ -30,6 +36,7 @@ export type DefineTaskContext = {
     executor: TaskExecutor
   }) => () => void
   abortTaskController: AbortTaskController
+  observability: ObservabilityContext
 }
 
 /**
@@ -62,7 +69,6 @@ export function createDefineTask(context: DefineTaskContext) {
       worker: createWorker,
       init = 'lazy',
       poolSize: providedPoolSize,
-      telemetry,
       taskName,
       taskId,
       maxInFlight,
@@ -77,7 +83,7 @@ export function createDefineTask(context: DefineTaskContext) {
 
     const poolSize = providedPoolSize ?? getDefaultPoolSize()
 
-    // Stable ID for telemetry; auto-generated if not provided.
+    // Stable ID for observability; auto-generated if not provided.
     const resolvedTaskId = taskId ?? `task-${globalTaskId++}`
     // Executor-level backpressure defaults:
     // - parallel: allow poolSize in-flight
@@ -93,7 +99,7 @@ export function createDefineTask(context: DefineTaskContext) {
             createWorker,
             poolSize,
             init,
-            telemetry,
+            context.observability,
             resolvedTaskId,
             taskName,
             resolvedMaxInFlight,
@@ -106,7 +112,7 @@ export function createDefineTask(context: DefineTaskContext) {
         : new SingletonWorker<T>(
             createWorker,
             init,
-            telemetry,
+            context.observability,
             resolvedTaskId,
             taskName,
             resolvedMaxInFlight,

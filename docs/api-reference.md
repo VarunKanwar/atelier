@@ -6,7 +6,15 @@ intentionally concise and reflects the current implementation.
 ## createTaskRuntime
 
 ```ts
-const runtime = createTaskRuntime()
+const runtime = createTaskRuntime({
+  observability: { spans: 'auto' },
+})
+```
+
+```ts
+type RuntimeConfig = {
+  observability?: ObservabilityConfig
+}
 ```
 
 Returns:
@@ -15,6 +23,9 @@ Returns:
 - `abortTaskController: AbortTaskController`
 - `getRuntimeSnapshot(): RuntimeSnapshot`
 - `subscribeRuntimeSnapshot(listener, options?): () => void`
+- `subscribeEvents(listener): () => void`
+- `createTrace(name?): TraceContext`
+- `runWithTrace(name, fn): Promise<T>`
 
 ## TaskConfig
 
@@ -26,15 +37,14 @@ type TaskConfig = {
   poolSize?: number
   keyOf?: (...args: any[]) => string
   timeoutMs?: number
+  crashPolicy?: 'restart-fail-in-flight' | 'restart-requeue-in-flight' | 'fail-task'
+  crashMaxRetries?: number
   taskName?: string
   taskId?: string
-  telemetry?: (event: TaskEvent) => void
   maxInFlight?: number
   maxQueueDepth?: number
   queuePolicy?: 'block' | 'reject' | 'drop-latest' | 'drop-oldest'
   idleTimeoutMs?: number
-  crashPolicy?: 'restart-fail-in-flight' | 'restart-requeue-in-flight' | 'fail-task'
-  crashMaxRetries?: number
 }
 ```
 
@@ -84,6 +94,7 @@ await resize.with({ transfer: [image.data.buffer] }).process(image)
 type TaskDispatchOptions = {
   key?: string
   signal?: AbortSignal
+  trace?: TraceContext
   transfer?: Transferable[]
   transferResult?: boolean
 }
@@ -91,6 +102,7 @@ type TaskDispatchOptions = {
 
 Notes:
 - Dispatch options are applied via `task.with(options)` and are not passed to worker handlers.
+- `trace` attaches explicit trace context to the call and is never passed to worker handlers.
 - `transfer`:
   - `undefined` (default): auto-detect using the `transferables` library.
   - `[]`: explicitly disable transfer (clone everything).
@@ -199,14 +211,121 @@ type RuntimeSnapshot = {
 `RuntimeTaskSnapshot` contains queue and worker metrics for each task.
 If a worker has crashed, `lastCrash` includes the most recent crash metadata.
 
-### Telemetry store
+### Observability config
 
 ```ts
-const telemetry = createTelemetryStore()
-const task = runtime.defineTask({ telemetry: telemetry.emit, ... })
+type ObservabilityConfig = {
+  spans?: SpansConfig
+}
+
+type SpansConfig =
+  | 'auto'
+  | 'on'
+  | 'off'
+  | {
+      mode?: 'auto' | 'on' | 'off'
+      sampleRate?: number
+    }
 ```
 
-`createTelemetryStore` is optional and provides latency/queue-wait percentiles.
+Notes:
+- `'auto'` enables spans in dev builds and disables them in production builds.
+- Dev/prod detection prefers `import.meta.env.DEV`, then falls back to
+  `process.env.NODE_ENV !== 'production'` when available.
+- `sampleRate` is clamped to `0..1` and applies to trace sampling (or root span sampling
+  when no trace is attached). Unsampled spans/traces emit no span/trace measures or events.
+
+### Tracing
+
+```ts
+const trace = runtime.createTrace('doc:123')
+await resize.with({ trace }).process(image)
+trace.end()
+```
+
+```ts
+await runtime.runWithTrace('doc:123', async trace => {
+  await resize.with({ trace }).process(image)
+})
+```
+
+```ts
+type TraceContext = {
+  id: string
+  name?: string
+  sampled: boolean
+  end: (options?: TraceEndOptions) => void
+}
+
+type TraceEndOptions = {
+  status?: 'ok' | 'error' | 'canceled'
+  error?: unknown
+}
+```
+
+`runWithTrace` automatically calls `trace.end()` with `status: 'ok'` or `'error'`
+(`'canceled'` for `AbortError`) based on the callback outcome.
+
+### Event stream
+
+```ts
+const unsubscribe = runtime.subscribeEvents(event => {
+  // MetricEvent | SpanEvent | TraceEvent
+})
+```
+
+```ts
+type RuntimeEvent = MetricEvent | SpanEvent | TraceEvent
+
+type MetricEvent = {
+  kind: 'counter' | 'gauge' | 'histogram'
+  name: string
+  value: number
+  ts: number
+  attrs?: Record<string, string | number>
+}
+
+type SpanEvent = {
+  kind: 'span'
+  name: 'atelier:span'
+  ts: number
+  spanId: string
+  traceId?: string
+  traceName?: string
+  callId: string
+  taskId: string
+  taskName?: string
+  taskType: TaskType
+  method: string
+  workerIndex?: number
+  queueWaitMs?: number
+  queueWaitLastMs?: number
+  attemptCount: number
+  durationMs?: number
+  status: 'ok' | 'error' | 'canceled'
+  errorKind?: 'abort' | 'queue' | 'crash' | 'exception'
+  error?: string
+}
+
+type TraceEvent = {
+  kind: 'trace'
+  name: 'atelier:trace'
+  ts: number
+  traceId: string
+  traceName?: string
+  durationMs?: number
+  status: 'ok' | 'error' | 'canceled'
+  errorKind?: 'abort' | 'queue' | 'crash' | 'exception'
+  error?: string
+}
+```
+
+### Performance spans
+
+When spans are enabled and sampled, each task call emits
+`performance.measure('atelier:span', ...)` and `trace.end()` emits
+`performance.measure('atelier:trace', ...)`. Use a
+`PerformanceObserver` if you want access to these entries.
 
 ## Errors
 

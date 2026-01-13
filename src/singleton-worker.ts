@@ -6,13 +6,23 @@
 import { type Remote, transfer, wrap } from 'comlink'
 import { getTransferables } from 'transferables'
 import { DispatchQueue } from './dispatch-queue'
+import {
+  classifyErrorKind,
+  createNoopObservabilityContext,
+  isAbortError,
+  stringifyError,
+} from './observability-utils'
 import type {
   CrashPolicy,
   InitMode,
+  MetricEvent,
+  ObservabilityContext,
   QueuePolicy,
+  SpanErrorKind,
+  SpanStatus,
   TaskDispatchOptions,
   TaskExecutor,
-  TelemetrySink,
+  TraceContext,
   WorkerState,
 } from './types'
 import { WorkerCrashedError } from './worker-crash-error'
@@ -24,6 +34,22 @@ type WorkerCall = {
   key?: string
   transfer?: Transferable[]
   transferResult?: boolean
+  trace?: TraceContext
+  span?: SpanRecord
+}
+
+type SpanRecord = {
+  spanId: string
+  callId: string
+  trace?: TraceContext
+  method: string
+  startTime: number
+  queueWaitMs: number
+  queueWaitLastMs?: number
+  attemptCount: number
+  workerIndex?: number
+  ended: boolean
+  sampled: boolean
 }
 
 /**
@@ -53,10 +79,15 @@ export class SingletonWorker<T = any> implements TaskExecutor {
   private disposed = false
   private readonly createWorker: () => Worker
   private readonly initMode: InitMode
-  private readonly telemetry?: TelemetrySink
+  private readonly observability: ObservabilityContext
   private readonly taskId: string
   private readonly taskName?: string
   private readonly queue: DispatchQueue<WorkerCall>
+  private readonly maxInFlight: number
+  private readonly maxQueueDepth: number
+  private readonly queuePolicy: QueuePolicy
+  private readonly taskAttrs: Record<string, string | number>
+  private readonly queueAttrs: Record<string, string | number>
   private readonly crashPolicy: CrashPolicy
   private readonly crashMaxRetries: number
   private crashCount = 0
@@ -73,7 +104,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
   constructor(
     createWorker: () => Worker,
     initMode: InitMode = 'lazy',
-    telemetry?: TelemetrySink,
+    observability?: ObservabilityContext,
     taskId: string = `task-${Math.random().toString(36).slice(2)}`,
     taskName?: string,
     maxInFlight: number = 1,
@@ -85,54 +116,48 @@ export class SingletonWorker<T = any> implements TaskExecutor {
   ) {
     this.createWorker = createWorker
     this.initMode = initMode
-    this.telemetry = telemetry
+    this.observability = observability ?? createNoopObservabilityContext()
     this.taskId = taskId
     this.taskName = taskName
     this.idleTimeoutMs = idleTimeoutMs
     this.crashPolicy = crashPolicy
     this.crashMaxRetries = crashMaxRetries
+    this.maxInFlight = maxInFlight
+    this.maxQueueDepth = maxQueueDepth
+    this.queuePolicy = queuePolicy
+    this.taskAttrs = {
+      'task.id': this.taskId,
+      'task.type': 'singleton',
+      ...(this.taskName ? { 'task.name': this.taskName } : {}),
+    }
+    this.queueAttrs = {
+      ...this.taskAttrs,
+      'queue.policy': this.queuePolicy,
+      'queue.max_in_flight': this.maxInFlight,
+      'queue.max_depth': this.maxQueueDepth,
+    }
 
     this.queue = new DispatchQueue<WorkerCall>(
       (payload, queueWaitMs) => this.dispatchToWorker(payload, queueWaitMs),
       { maxInFlight, maxQueueDepth, queuePolicy },
       {
-        onBlocked: (_payload, blockedDepth, maxDepth) => {
-          this.telemetry?.({
-            type: 'blocked',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            blockedDepth,
-            queueLimit: maxDepth,
-          })
+        onBlocked: () => {
+          this.emitQueueGauges()
         },
-        onQueued: (_payload, pendingDepth, maxDepth) => {
-          this.telemetry?.({
-            type: 'queued',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            queueDepth: pendingDepth,
-            queueLimit: maxDepth,
-          })
+        onQueued: () => {
+          this.emitQueueGauges()
         },
-        onReject: (_payload, error) => {
-          this.telemetry?.({
-            type: 'rejected',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            error,
-          })
+        onDispatch: (payload, queueWaitMs) => {
+          this.onDispatchAttempt(payload, queueWaitMs)
+        },
+        onReject: (payload, error) => {
+          this.emitMetric('counter', 'task.rejected.total', 1, this.queueAttrs)
+          this.emitQueueGauges()
+          this.endSpan(payload.span, 'error', 'queue', error)
         },
         onCancel: (payload, phase) => {
-          this.telemetry?.({
-            type: 'canceled',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            canceledPhase: phase,
-          })
+          this.emitQueueGauges()
+          this.endSpan(payload.span, 'canceled', 'abort')
           if (phase === 'in-flight') {
             this.cancelInFlightCall(payload.callId)
           }
@@ -152,6 +177,130 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     }
   }
 
+  private emitMetric(
+    kind: MetricEvent['kind'],
+    name: string,
+    value: number,
+    attrs?: Record<string, string | number>
+  ): void {
+    this.observability.emitEvent({ kind, name, value, ts: Date.now(), attrs })
+  }
+
+  private emitQueueGauges(): void {
+    const state = this.queue.getState()
+    this.emitMetric('gauge', 'queue.in_flight', state.inFlight, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.pending', state.pending, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.blocked', state.blocked, this.queueAttrs)
+  }
+
+  private emitWorkersActive(): void {
+    const activeWorkers = this.worker ? 1 : 0
+    this.emitMetric('gauge', 'workers.active', activeWorkers, this.taskAttrs)
+  }
+
+  private getWorkerAttrs(workerIndex: number): Record<string, string | number> {
+    return { ...this.taskAttrs, 'worker.index': workerIndex }
+  }
+
+  private createSpan(callId: string, method: string, trace?: TraceContext): SpanRecord {
+    return {
+      spanId: callId,
+      callId,
+      trace,
+      method,
+      startTime: this.observability.now(),
+      queueWaitMs: 0,
+      attemptCount: 0,
+      ended: false,
+      sampled: this.observability.shouldSampleSpan(trace, callId),
+    }
+  }
+
+  private onDispatchAttempt(payload: WorkerCall, queueWaitMs: number): void {
+    const span = payload.span
+    if (span && !span.ended) {
+      span.attemptCount += 1
+      span.queueWaitMs += queueWaitMs
+      span.queueWaitLastMs = queueWaitMs
+    }
+    this.emitMetric('counter', 'task.dispatch.total', 1, this.taskAttrs)
+    this.emitMetric('histogram', 'queue.wait_ms', queueWaitMs, this.queueAttrs)
+    this.emitQueueGauges()
+  }
+
+  private endSpan(
+    span: SpanRecord | undefined,
+    status: SpanStatus,
+    errorKind?: SpanErrorKind,
+    error?: unknown
+  ): void {
+    if (!span || span.ended) return
+    span.ended = true
+    const endTime = this.observability.now()
+    const durationMs = endTime - span.startTime
+
+    if (span.attemptCount === 0 && span.queueWaitMs === 0) {
+      const wait = durationMs
+      span.queueWaitMs = wait
+      span.queueWaitLastMs = wait
+    }
+
+    if (status === 'ok') {
+      this.emitMetric('counter', 'task.success.total', 1, this.taskAttrs)
+    } else if (status === 'canceled') {
+      this.emitMetric('counter', 'task.canceled.total', 1, this.taskAttrs)
+    } else if (status === 'error' && errorKind !== 'queue') {
+      this.emitMetric('counter', 'task.failure.total', 1, this.taskAttrs)
+    }
+
+    this.emitMetric('histogram', 'task.duration_ms', durationMs, this.taskAttrs)
+
+    if (!span.sampled || !this.observability.spansEnabled) return
+
+    const resolvedErrorKind = errorKind ?? (error ? classifyErrorKind(error) : undefined)
+    const errorMessage = error ? stringifyError(error) : undefined
+
+    this.observability.emitMeasure('atelier:span', span.startTime, endTime, {
+      spanId: span.spanId,
+      traceId: span.trace?.id,
+      traceName: span.trace?.name,
+      callId: span.callId,
+      taskId: this.taskId,
+      taskName: this.taskName,
+      taskType: 'singleton',
+      method: span.method,
+      workerIndex: span.workerIndex,
+      queueWaitMs: span.queueWaitMs,
+      queueWaitLastMs: span.queueWaitLastMs,
+      attemptCount: span.attemptCount,
+      status,
+      errorKind: resolvedErrorKind,
+      error: errorMessage,
+    })
+
+    this.observability.emitEvent({
+      kind: 'span',
+      name: 'atelier:span',
+      ts: Date.now(),
+      spanId: span.spanId,
+      traceId: span.trace?.id,
+      traceName: span.trace?.name,
+      callId: span.callId,
+      taskId: this.taskId,
+      taskName: this.taskName,
+      taskType: 'singleton',
+      method: span.method,
+      workerIndex: span.workerIndex,
+      queueWaitMs: span.queueWaitMs,
+      queueWaitLastMs: span.queueWaitLastMs,
+      attemptCount: span.attemptCount,
+      durationMs,
+      status,
+      errorKind: resolvedErrorKind,
+      error: errorMessage,
+    })
+  }
+
   private initializeWorker(): void {
     if (!this.worker) {
       const workerInstance = this.createWorker()
@@ -161,13 +310,8 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       this.attachCrashListeners(workerInstance)
       this.crashed = false
       this.workerStatus = 'running'
-      this.telemetry?.({
-        type: 'worker:spawn',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex: 0,
-        ts: Date.now(),
-      })
+      this.emitMetric('counter', 'worker.spawn.total', 1, this.getWorkerAttrs(0))
+      this.emitWorkersActive()
     }
   }
 
@@ -269,14 +413,8 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     this.lastCrash = { ts: Date.now(), error: cause, workerIndex: 0 }
     this.workerStatus = 'crashed'
 
-    this.telemetry?.({
-      type: 'worker:crash',
-      taskId: this.taskId,
-      taskName: this.taskName,
-      workerIndex: 0,
-      ts: Date.now(),
-      error: cause,
-    })
+    this.emitMetric('counter', 'worker.crash.total', 1, this.getWorkerAttrs(0))
+    this.emitWorkersActive()
 
     this.detachCrashListeners()
     if (this.worker) {
@@ -298,15 +436,8 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       // Settle in-flight calls for the crashed worker to avoid deadlocks.
       const rejected = this.queue.rejectInFlight(() => true, crashError)
       if (rejected.length > 0) {
-        for (const _payload of rejected) {
-          this.telemetry?.({
-            type: 'error',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            workerIndex: 0,
-            ts: Date.now(),
-            error: crashError,
-          })
+        for (const payload of rejected) {
+          this.endSpan(payload.span, 'error', 'crash', crashError)
         }
       }
       this.scheduleRestart()
@@ -317,16 +448,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       // Requeue in-flight work so it can be retried on a fresh worker.
       const requeued = this.queue.requeueInFlight(() => true)
       if (requeued.length > 0) {
-        for (const _payload of requeued) {
-          this.telemetry?.({
-            type: 'error',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            workerIndex: 0,
-            ts: Date.now(),
-            error: crashError,
-          })
-        }
+        this.emitMetric('counter', 'task.requeue.total', requeued.length, this.taskAttrs)
       }
       this.scheduleRestart()
       return
@@ -338,12 +460,17 @@ export class SingletonWorker<T = any> implements TaskExecutor {
   private haltTask(error: Error): void {
     this.halted = true
     this.haltedError = error
-    this.queue.rejectAll(error)
+    const rejected = this.queue.rejectAll(error)
+    const errorKind = classifyErrorKind(error)
+    for (const payload of [...rejected.pending, ...rejected.blocked, ...rejected.inFlight]) {
+      this.endSpan(payload.span, 'error', errorKind, error)
+    }
+    this.emitQueueGauges()
     this.queue.pause()
     this.terminateWorker()
   }
 
-  private async dispatchToWorker(payload: WorkerCall, queueWaitMs: number): Promise<unknown> {
+  private async dispatchToWorker(payload: WorkerCall, _queueWaitMs: number): Promise<unknown> {
     if (this.halted) {
       throw this.haltedError ?? new Error('Task is halted after worker crash')
     }
@@ -372,27 +499,13 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     const argsToSend =
       argTransferables.length > 0 ? transfer(payload.args, argTransferables) : payload.args
 
-    const start = Date.now()
-    this.telemetry?.({
-      type: 'dispatch',
-      taskId: this.taskId,
-      taskName: this.taskName,
-      workerIndex: 0,
-      ts: start,
-      queueWaitMs,
-    })
+    if (payload.span && !payload.span.ended) {
+      payload.span.workerIndex = 0
+    }
 
     try {
       const result = await workerDispatch(payload.callId, payload.method, argsToSend, payload.key)
-      const durationMs = Date.now() - start
-      this.telemetry?.({
-        type: 'success',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex: 0,
-        ts: Date.now(),
-        durationMs,
-      })
+      this.endSpan(payload.span, 'ok')
       this.resetCrashTracking()
 
       // Auto-detect or skip transferables for result
@@ -405,16 +518,11 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       }
       return result
     } catch (error) {
-      const durationMs = Date.now() - start
-      this.telemetry?.({
-        type: 'error',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex: 0,
-        ts: Date.now(),
-        durationMs,
-        error,
-      })
+      if (isAbortError(error)) {
+        this.endSpan(payload.span, 'canceled', 'abort', error)
+      } else {
+        this.endSpan(payload.span, 'error', classifyErrorKind(error), error)
+      }
       throw error
     }
   }
@@ -425,6 +533,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       return Promise.reject(this.haltedError ?? new Error('Task is halted after worker crash'))
     }
     const callId = `${this.taskId}-${this.callIdCounter++}`
+    const span = this.createSpan(callId, method, options?.trace)
     return this.queue.enqueue(
       {
         callId,
@@ -433,6 +542,8 @@ export class SingletonWorker<T = any> implements TaskExecutor {
         key: options?.key,
         transfer: options?.transfer,
         transferResult: options?.transferResult,
+        trace: options?.trace,
+        span,
       },
       options
     )
@@ -516,15 +627,10 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     if (this.workerInstance) {
       this.workerInstance.terminate()
       this.workerInstance = null
-      this.telemetry?.({
-        type: 'worker:terminate',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex: 0,
-        ts: Date.now(),
-      })
+      this.emitMetric('counter', 'worker.terminate.total', 1, this.getWorkerAttrs(0))
     }
     this.workerStatus = 'stopped'
+    this.emitWorkersActive()
   }
 
   private scheduleIdleStop(): void {

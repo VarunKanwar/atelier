@@ -4,7 +4,7 @@
 
 Atelier is a small task runtime that treats tasks as the primary unit of
 execution. It focuses on predictable backpressure, keyed cancellation, and
-simple runtime-scoped observability.
+runtime-scoped observability (snapshots, event stream, optional spans).
 
 This document explains the architecture and the main design decisions.
 
@@ -16,7 +16,7 @@ This document explains the architecture and the main design decisions.
 
 - a task registry for known tasks
 - a keyed cancellation domain (`AbortTaskController`)
-- snapshot helpers for observability
+- observability helpers (snapshots + event stream)
 
 This keeps cancellation and observability scoped and avoids hidden global state.
 
@@ -114,9 +114,9 @@ References:
 
 Workers can crash (error/messageerror). Each task config declares a
 `crashPolicy` that determines whether to restart and how to handle in-flight
-work. Crashes are surfaced in telemetry (`worker:crash`) and via `lastCrash`
-in the task state snapshot. Restarts apply a small internal backoff to avoid
-tight crash loops.
+work. Crashes are surfaced via `lastCrash` in the task state snapshot and
+`worker.crash.total` metric events from `subscribeEvents()`. Restarts apply a
+small internal backoff to avoid tight crash loops.
 
 ### Keyed cancellation
 
@@ -146,12 +146,25 @@ This prevents downstream code from accidentally acting on canceled results.
 
 ## Observability
 
-Each task exposes `getState()` with queue and worker metrics. The runtime registry
-aggregates those into a `RuntimeSnapshot` via `getRuntimeSnapshot()` or
-`subscribeRuntimeSnapshot()`.
+Atelier exposes three observability surfaces:
 
-For latency percentiles and queue wait distributions, an optional
-`createTelemetryStore()` can be attached per task.
+1. **Runtime snapshots** via `getRuntimeSnapshot()` or `subscribeRuntimeSnapshot()`.
+   These provide queue depths, worker counts, and recent crash metadata.
+2. **Event stream** via `subscribeEvents()` for counters, gauges, histograms,
+   and mirrored span/trace events. This is raw data; aggregation is left to
+   consumers.
+3. **Performance API measures** when spans are enabled. Each task call emits
+   `performance.measure('atelier:span', ...)`, and `trace.end()` emits
+   `performance.measure('atelier:trace', ...)`.
+
+Tracing is explicit: create a trace with `runtime.createTrace()` (or
+`runtime.runWithTrace()`), then attach it using `task.with({ trace })`. Atelier
+does not propagate context implicitly across async boundaries.
+
+Spans are opt-in via `createTaskRuntime({ observability: { spans } })`. The
+default `'auto'` mode enables spans in dev builds and disables them in prod.
+Sampling is trace-level when a trace is present; otherwise sampling is applied
+per span.
 
 ## Tradeoffs
 
