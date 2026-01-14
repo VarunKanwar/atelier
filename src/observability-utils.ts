@@ -1,10 +1,16 @@
 import type { ObservabilityContext, RuntimeEvent, SpanErrorKind, TraceContext } from './types'
 
+export const now = (): number => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
+}
+
 export const createNoopObservabilityContext = (): ObservabilityContext => ({
   spansEnabled: false,
   sampleRate: 1,
-  now: () =>
-    typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(),
+  now,
   emitEvent: (_event: RuntimeEvent) => {},
   emitMeasure: (_name: string, _start: number, _end: number, _detail?: object) => {},
   shouldSampleSpan: (_trace: TraceContext | undefined, _spanId: string) => false,

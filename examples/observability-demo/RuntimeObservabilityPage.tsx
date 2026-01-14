@@ -553,11 +553,12 @@ const RuntimeObservabilityPage = () => {
       tasks.enhance.dispose()
     }
     tasksRef.current = createTasks(runtime)
+    resetEvents()
     setStatus('idle')
     setInFlight(0)
     setMaxInFlight(0)
     setIsPaused(false)
-  }, [runtime])
+  }, [resetEvents, runtime])
 
   return (
     <Box minH="100vh" bg="gray.50">

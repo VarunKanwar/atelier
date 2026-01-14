@@ -28,7 +28,7 @@ Atelier is a browser-only task runtime for Web Worker orchestration. It provides
 
 - TypeScript, ESM (`"type": "module"` in `package.json`).
 - Formatting/lint: Biome (`bun run check` / `bun run check:fix`).
-- Tests: Vitest (`bun test` or `npm run test`).
+- Tests: Vitest (`bun run test` or `npm run test`).
 - Build: `bun run build` (tsc build config in `tsconfig.build.json`).
 
 Prefer small, well-scoped changes and keep types precise.

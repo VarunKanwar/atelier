@@ -1,6 +1,6 @@
 import { type AbortTaskController, createAbortTaskController } from './abort-task-controller'
 import { createDefineTask, type Task } from './define-task'
-import { classifyErrorKind, isAbortError, sampleById, stringifyError } from './observability-utils'
+import { classifyErrorKind, isAbortError, now as getNow, sampleById, stringifyError } from './observability-utils'
 import type {
   InitMode,
   ObservabilityConfig,
@@ -138,12 +138,7 @@ export const createTaskRuntime = (config: RuntimeConfig = {}): TaskRuntime => {
     }
   }
 
-  const now = () => {
-    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-      return performance.now()
-    }
-    return Date.now()
-  }
+  const now = getNow
 
   const emitMeasure = (name: string, start: number, end: number, detail?: object) => {
     if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return

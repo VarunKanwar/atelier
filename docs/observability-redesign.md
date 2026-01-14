@@ -184,8 +184,9 @@ We provide **explicit trace context** only:
 **Trace end**
 - `trace.end()` emits a **trace measure** named `atelier:trace` (with duration)
   when spans are enabled and the trace is sampled.
-- `trace.end()` also emits a `TraceEvent` for consumers who want reliable
-  duration data without relying on Performance entries.
+- `trace.end()` also emits a `TraceEvent` under the **same gating** (spans must
+  be enabled and the trace must be sampled). When spans are off or the trace is
+  unsampled, no trace event is emitted.
 - Trace status is derived from the `runWithTrace` callback outcome:
   - resolve → `ok`
   - throw `AbortError` → `canceled`
@@ -275,6 +276,12 @@ runtime.subscribeEvents((event) => { ... })
 **Rationale**
 - The event stream is authoritative; consumers can aggregate without coupling
   the core runtime to specific metrics backends.
+
+**Recommendation**
+- Use `subscribeEvents()` as the canonical telemetry stream (metrics + span/trace
+  events with full metadata).
+- Use Performance measures for profiling/devtools only. They are best-effort and
+  may drop entries or omit `detail` depending on browser support.
 
 ## Metrics
 

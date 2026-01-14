@@ -327,6 +327,11 @@ When spans are enabled and sampled, each task call emits
 `performance.measure('atelier:trace', ...)`. Use a
 `PerformanceObserver` if you want access to these entries.
 
+**Recommendation:** use `subscribeEvents()` as the canonical telemetry stream
+(metrics + span/trace events with full metadata). Performance measures are
+best-effort and can be dropped or omit `detail` depending on browser support,
+so they are best suited for profiling and devtools integrations.
+
 ## Errors
 
 ### WorkerCrashedError

@@ -20,6 +20,7 @@
  * - Call `enqueue(payload, options)` to schedule work (optionally abortable).
  */
 
+import { now as getNow } from './observability-utils'
 import type { QueuePolicy, TaskDispatchOptions } from './types'
 
 export type DispatchQueueState = {
@@ -39,6 +40,7 @@ export type DispatchQueueHooks<T> = {
   onDispatch?: (payload: T, queueWaitMs: number) => void
   onReject?: (payload: T, error: Error) => void
   onCancel?: (payload: T, phase: 'queued' | 'blocked' | 'in-flight') => void
+  onStateChange?: (state: DispatchQueueState) => void
   onIdle?: () => void
   onActive?: () => void
 }
@@ -97,7 +99,7 @@ export class DispatchQueue<T> {
     return new Promise((resolve, reject) => {
       const entry: QueueEntry<T> = {
         payload,
-        enqueuedAt: Date.now(),
+        enqueuedAt: getNow(),
         resolve,
         reject,
         signal,
@@ -234,7 +236,7 @@ export class DispatchQueue<T> {
       }
 
       // Reset queue wait time for the requeued attempt.
-      entry.enqueuedAt = Date.now()
+      entry.enqueuedAt = getNow()
       requeued.push(entry.payload)
 
       if (this.pending.length >= this.maxQueueDepth) {
@@ -347,7 +349,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
 
-      const queueWaitMs = Date.now() - entry.enqueuedAt
+      const queueWaitMs = getNow() - entry.enqueuedAt
       entry.state = 'in-flight'
       // Bump attempt so any completion from a previous dispatch is ignored.
       entry.attempt += 1
@@ -417,6 +419,7 @@ export class DispatchQueue<T> {
   }
 
   private notifyStateChange(): void {
+    this.hooks.onStateChange?.(this.getState())
     // Emit idle/active transitions for idle-timeout handling.
     const idle = this.isIdle()
     if (idle && !this.wasIdle) {

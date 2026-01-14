@@ -17,7 +17,7 @@
 
 import { type Remote, transfer, wrap } from 'comlink'
 import { getTransferables } from 'transferables'
-import { DispatchQueue } from './dispatch-queue'
+import { DispatchQueue, type DispatchQueueState } from './dispatch-queue'
 import {
   classifyErrorKind,
   createNoopObservabilityContext,
@@ -154,22 +154,17 @@ export class WorkerPool<T = any> implements TaskExecutor {
       (payload, queueWaitMs) => this.dispatchToWorker(payload, queueWaitMs),
       { maxInFlight, maxQueueDepth, queuePolicy },
       {
-        onBlocked: () => {
-          this.emitQueueGauges()
-        },
-        onQueued: () => {
-          this.emitQueueGauges()
+        onStateChange: state => {
+          this.emitQueueGauges(state)
         },
         onDispatch: (payload, queueWaitMs) => {
           this.onDispatchAttempt(payload, queueWaitMs)
         },
         onReject: (payload, error) => {
           this.emitMetric('counter', 'task.rejected.total', 1, this.queueAttrs)
-          this.emitQueueGauges()
           this.endSpan(payload.span, 'error', 'queue', error)
         },
         onCancel: (payload, phase) => {
-          this.emitQueueGauges()
           this.endSpan(payload.span, 'canceled', 'abort')
           if (phase === 'in-flight') {
             this.cancelInFlightCall(payload.callId)
@@ -199,11 +194,11 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.observability.emitEvent({ kind, name, value, ts: Date.now(), attrs })
   }
 
-  private emitQueueGauges(): void {
-    const state = this.queue.getState()
-    this.emitMetric('gauge', 'queue.in_flight', state.inFlight, this.queueAttrs)
-    this.emitMetric('gauge', 'queue.pending', state.pending, this.queueAttrs)
-    this.emitMetric('gauge', 'queue.blocked', state.blocked, this.queueAttrs)
+  private emitQueueGauges(state?: DispatchQueueState): void {
+    const snapshot = state ?? this.queue.getState()
+    this.emitMetric('gauge', 'queue.in_flight', snapshot.inFlight, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.pending', snapshot.pending, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.blocked', snapshot.blocked, this.queueAttrs)
   }
 
   private emitWorkersActive(): void {
@@ -238,7 +233,6 @@ export class WorkerPool<T = any> implements TaskExecutor {
     }
     this.emitMetric('counter', 'task.dispatch.total', 1, this.taskAttrs)
     this.emitMetric('histogram', 'queue.wait_ms', queueWaitMs, this.queueAttrs)
-    this.emitQueueGauges()
   }
 
   private endSpan(
@@ -521,7 +515,6 @@ export class WorkerPool<T = any> implements TaskExecutor {
     for (const payload of [...rejected.pending, ...rejected.blocked, ...rejected.inFlight]) {
       this.endSpan(payload.span, 'error', errorKind, error)
     }
-    this.emitQueueGauges()
     this.queue.pause()
     this.terminateWorkers()
   }

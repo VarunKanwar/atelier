@@ -157,6 +157,9 @@ Atelier exposes three observability surfaces:
    `performance.measure('atelier:span', ...)`, and `trace.end()` emits
    `performance.measure('atelier:trace', ...)`.
 
+Recommended usage: treat `subscribeEvents()` as the canonical telemetry stream
+and use Performance measures for profiling/devtools integrations only.
+
 Tracing is explicit: create a trace with `runtime.createTrace()` (or
 `runtime.runWithTrace()`), then attach it using `task.with({ trace })`. Atelier
 does not propagate context implicitly across async boundaries.

@@ -145,6 +145,12 @@ await runtime.runWithTrace('doc:123', async trace => {
 })
 ```
 
+Recommended usage:
+- Use `subscribeEvents()` as the canonical telemetry stream (counters, gauges,
+  histograms, and span/trace events with full metadata).
+- Use `PerformanceObserver` only for profiling/devtools integrations. Measures
+  are best-effort and may drop entries or omit `detail` in some browsers.
+
 ## API summary
 
 - `createTaskRuntime()`
@@ -174,7 +180,7 @@ cd atelier
 bun install
 
 # Run tests
-bun test
+bun run test
 
 # Lint and format
 bun run check:fix
