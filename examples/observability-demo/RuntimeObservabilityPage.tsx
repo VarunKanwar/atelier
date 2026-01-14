@@ -4,9 +4,12 @@ import {
   Button,
   Collapsible,
   Container,
+  createListCollection,
   Heading,
   HStack,
   Input,
+  Portal,
+  Select,
   SimpleGrid,
   Stack,
   Tabs,
@@ -92,12 +95,23 @@ const RuntimeObservabilityPage = () => {
   const [inFlight, setInFlight] = useState(0)
   const [maxInFlight, setMaxInFlight] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
+  const [traceMode, setTraceMode] = useState<'run' | 'image'>('run')
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [finishedAt, setFinishedAt] = useState<number | null>(null)
   const [results, setResults] = useState<ResultItem[]>([])
   const runIdRef = useRef(0)
   const { stats: eventStats, reset: resetEvents } = useRuntimeEvents(runtime)
-  const [detailsExpanded, setDetailsExpanded] = useState(false)
+  const [detailsExpanded, setDetailsExpanded] = useState(true)
+  const traceScopeOptions = useMemo(
+    () =>
+      createListCollection({
+        items: [
+          { label: 'Per run', value: 'run' },
+          { label: 'Per image', value: 'image' },
+        ],
+      }),
+    []
+  )
   const traceVisualization = useMemo(() => {
     const traceId = eventStats.lastTraceId
     if (!traceId) return null
@@ -448,13 +462,18 @@ const RuntimeObservabilityPage = () => {
     let maxActive = 0
 
     try {
-      await runtime.runWithTrace(`demo-run-${runId}`, async trace => {
+      const runBatch = async (trace?: TraceContext) => {
         const processWithTracking = async (image: ImageData) => {
           active += 1
           maxActive = Math.max(maxActive, active)
           setInFlight(active)
           setMaxInFlight(maxActive)
           try {
+            if (traceMode === 'image') {
+              return await runtime.runWithTrace(`image:${image.name}`, async imageTrace =>
+                processImage(image, imageTrace)
+              )
+            }
             return await processImage(image, trace)
           } finally {
             active = Math.max(0, active - 1)
@@ -494,14 +513,20 @@ const RuntimeObservabilityPage = () => {
             )
           }
         }
-      })
+      }
+
+      if (traceMode === 'run') {
+        await runtime.runWithTrace(`demo-run-${runId}`, async trace => runBatch(trace))
+      } else {
+        await runBatch()
+      }
     } finally {
       if (runIdRef.current === runId) {
         setStatus('done')
         setFinishedAt(Date.now())
       }
     }
-  }, [batchSize, concurrencyLimit, isPaused, processImage, resetEvents, runtime, status])
+  }, [batchSize, concurrencyLimit, isPaused, processImage, resetEvents, runtime, status, traceMode])
 
   const handlePauseToggle = useCallback(() => {
     const tasks = tasksRef.current
@@ -579,6 +604,43 @@ const RuntimeObservabilityPage = () => {
                       max={64}
                       onChange={event => setConcurrencyLimit(Number(event.target.value))}
                     />
+                  </Box>
+                  <Box>
+                    <Text fontSize="xs" color="gray.500" mb={1}>
+                      Trace scope
+                    </Text>
+                    <Select.Root
+                      size="sm"
+                      width="full"
+                      collection={traceScopeOptions}
+                      value={[traceMode]}
+                      onValueChange={event => {
+                        const next = event.value[0] as 'run' | 'image' | undefined
+                        if (next) setTraceMode(next)
+                      }}
+                    >
+                      <Select.HiddenSelect />
+                      <Select.Control>
+                        <Select.Trigger>
+                          <Select.ValueText placeholder="Select trace scope" />
+                        </Select.Trigger>
+                        <Select.IndicatorGroup>
+                          <Select.Indicator />
+                        </Select.IndicatorGroup>
+                      </Select.Control>
+                      <Portal>
+                        <Select.Positioner>
+                          <Select.Content>
+                            {traceScopeOptions.items.map(item => (
+                              <Select.Item key={item.value} item={item}>
+                                {item.label}
+                                <Select.ItemIndicator />
+                              </Select.Item>
+                            ))}
+                          </Select.Content>
+                        </Select.Positioner>
+                      </Portal>
+                    </Select.Root>
                   </Box>
                 </Stack>
 
