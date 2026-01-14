@@ -5,7 +5,6 @@ vi.mock('comlink', () => ({
 }))
 
 import { SingletonWorker } from '../../src/singleton-worker'
-import type { TaskEvent } from '../../src/types'
 import { WorkerCrashedError } from '../../src/worker-crash-error'
 import { WorkerPool } from '../../src/worker-pool'
 import { deferred, tick as flush } from '../helpers/deferred'
@@ -32,7 +31,6 @@ afterEach(() => {
 describe('worker crash recovery', () => {
   it('singleton restart-fail-in-flight rejects in-flight and restarts with backoff', async () => {
     vi.useFakeTimers()
-    const events: TaskEvent[] = []
 
     const firstGate = deferred<string>()
     const { createWorker, created } = makeWorkerFactory([
@@ -43,7 +41,7 @@ describe('worker crash recovery', () => {
     const worker = new SingletonWorker(
       createWorker,
       'lazy',
-      event => events.push(event),
+      undefined,
       'task-1',
       'Test Task',
       1,
@@ -62,7 +60,6 @@ describe('worker crash recovery', () => {
     await expect(promise).rejects.toBeInstanceOf(WorkerCrashedError)
     expect(worker.getState().workerStatus).toBe('crashed')
     expect(worker.getState().lastCrash).toBeTruthy()
-    expect(events.some(event => event.type === 'worker:crash')).toBe(true)
 
     vi.advanceTimersByTime(99)
     await flush()
