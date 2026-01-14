@@ -1,6 +1,12 @@
 import { type AbortTaskController, createAbortTaskController } from './abort-task-controller'
 import { createDefineTask, type Task } from './define-task'
-import { classifyErrorKind, isAbortError, now as getNow, sampleById, stringifyError } from './observability-utils'
+import {
+  classifyErrorKind,
+  now as getNow,
+  isAbortError,
+  sampleById,
+  stringifyError,
+} from './observability-utils'
 import type {
   InitMode,
   ObservabilityConfig,

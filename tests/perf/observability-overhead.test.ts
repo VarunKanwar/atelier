@@ -7,7 +7,7 @@ vi.mock('comlink', () => ({
 }))
 
 import { createTaskRuntime } from '../../src/runtime'
-import { FakeWorker, type DispatchHandler } from '../helpers/fake-worker'
+import { type DispatchHandler, FakeWorker } from '../helpers/fake-worker'
 
 type TestAPI = {
   process: (value: string) => Promise<string>
@@ -67,11 +67,7 @@ const measureDuration = async (task: TestAPI, iterations: number): Promise<numbe
   return now() - start
 }
 
-const measureBestOf = async (
-  task: TestAPI,
-  iterations: number,
-  runs: number
-): Promise<number> => {
+const measureBestOf = async (task: TestAPI, iterations: number, runs: number): Promise<number> => {
   let best = Number.POSITIVE_INFINITY
   for (let i = 0; i < runs; i++) {
     const duration = await measureDuration(task, iterations)
