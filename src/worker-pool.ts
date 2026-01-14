@@ -8,7 +8,7 @@
  * Design:
  * - Uses a shared DispatchQueue to cap in-flight + queued calls.
  * - Dispatches to workers in round-robin order.
- * - Emits telemetry at queue/dispatch/complete boundaries.
+ * - Emits observability events at queue/dispatch/complete boundaries.
  *
  * Usage:
  * - Constructed via `runtime.defineTask({ type: 'parallel', ... })`.
@@ -17,14 +17,24 @@
 
 import { type Remote, transfer, wrap } from 'comlink'
 import { getTransferables } from 'transferables'
-import { DispatchQueue } from './dispatch-queue'
+import { DispatchQueue, type DispatchQueueState } from './dispatch-queue'
+import {
+  classifyErrorKind,
+  createNoopObservabilityContext,
+  isAbortError,
+  stringifyError,
+} from './observability-utils'
 import type {
   CrashPolicy,
   InitMode,
+  MetricEvent,
+  ObservabilityContext,
   QueuePolicy,
+  SpanErrorKind,
+  SpanStatus,
   TaskDispatchOptions,
   TaskExecutor,
-  TelemetrySink,
+  TraceContext,
   WorkerState,
 } from './types'
 import { WorkerCrashedError } from './worker-crash-error'
@@ -36,6 +46,22 @@ type WorkerCall = {
   key?: string
   transfer?: Transferable[]
   transferResult?: boolean
+  trace?: TraceContext
+  span?: SpanRecord
+}
+
+type SpanRecord = {
+  spanId: string
+  callId: string
+  trace?: TraceContext
+  method: string
+  startTime: number
+  queueWaitMs: number
+  queueWaitLastMs?: number
+  attemptCount: number
+  workerIndex?: number
+  ended: boolean
+  sampled: boolean
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped worker pools
@@ -56,10 +82,15 @@ export class WorkerPool<T = any> implements TaskExecutor {
   private readonly poolSize: number
   private readonly createWorker: () => Worker
   private readonly initMode: InitMode
-  private readonly telemetry?: TelemetrySink
+  private readonly observability: ObservabilityContext
   private readonly taskId: string
   private readonly taskName?: string
   private readonly queue: DispatchQueue<WorkerCall>
+  private readonly maxInFlight: number
+  private readonly maxQueueDepth: number
+  private readonly queuePolicy: QueuePolicy
+  private readonly taskAttrs: Record<string, string | number>
+  private readonly queueAttrs: Record<string, string | number>
   private readonly crashPolicy: CrashPolicy
   private readonly crashMaxRetries: number
   private crashCount = 0
@@ -77,7 +108,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     createWorker: () => Worker,
     poolSize: number = navigator.hardwareConcurrency || 4,
     initMode: InitMode = 'lazy',
-    telemetry?: TelemetrySink,
+    observability?: ObservabilityContext,
     taskId: string = `task-${Math.random().toString(36).slice(2)}`,
     taskName?: string,
     maxInFlight: number = poolSize,
@@ -90,12 +121,26 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.createWorker = createWorker
     this.poolSize = poolSize
     this.initMode = initMode
-    this.telemetry = telemetry
+    this.observability = observability ?? createNoopObservabilityContext()
     this.taskId = taskId
     this.taskName = taskName
     this.idleTimeoutMs = idleTimeoutMs
     this.crashPolicy = crashPolicy
     this.crashMaxRetries = crashMaxRetries
+    this.maxInFlight = maxInFlight
+    this.maxQueueDepth = maxQueueDepth
+    this.queuePolicy = queuePolicy
+    this.taskAttrs = {
+      'task.id': this.taskId,
+      'task.type': 'parallel',
+      ...(this.taskName ? { 'task.name': this.taskName } : {}),
+    }
+    this.queueAttrs = {
+      ...this.taskAttrs,
+      'queue.policy': this.queuePolicy,
+      'queue.max_in_flight': this.maxInFlight,
+      'queue.max_depth': this.maxQueueDepth,
+    }
 
     // Initialize array with nulls
     this.workers = Array(poolSize).fill(null)
@@ -109,43 +154,18 @@ export class WorkerPool<T = any> implements TaskExecutor {
       (payload, queueWaitMs) => this.dispatchToWorker(payload, queueWaitMs),
       { maxInFlight, maxQueueDepth, queuePolicy },
       {
-        onBlocked: (_payload, blockedDepth, maxDepth) => {
-          this.telemetry?.({
-            type: 'blocked',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            blockedDepth,
-            queueLimit: maxDepth,
-          })
+        onStateChange: state => {
+          this.emitQueueGauges(state)
         },
-        onQueued: (_payload, pendingDepth, maxDepth) => {
-          this.telemetry?.({
-            type: 'queued',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            queueDepth: pendingDepth,
-            queueLimit: maxDepth,
-          })
+        onDispatch: (payload, queueWaitMs) => {
+          this.onDispatchAttempt(payload, queueWaitMs)
         },
-        onReject: (_payload, error) => {
-          this.telemetry?.({
-            type: 'rejected',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            error,
-          })
+        onReject: (payload, error) => {
+          this.emitMetric('counter', 'task.rejected.total', 1, this.queueAttrs)
+          this.endSpan(payload.span, 'error', 'queue', error)
         },
         onCancel: (payload, phase) => {
-          this.telemetry?.({
-            type: 'canceled',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            ts: Date.now(),
-            canceledPhase: phase,
-          })
+          this.endSpan(payload.span, 'canceled', 'abort')
           if (phase === 'in-flight') {
             this.cancelInFlightCall(payload.callId)
           }
@@ -163,6 +183,129 @@ export class WorkerPool<T = any> implements TaskExecutor {
     if (initMode === 'eager') {
       this.initializePool()
     }
+  }
+
+  private emitMetric(
+    kind: MetricEvent['kind'],
+    name: string,
+    value: number,
+    attrs?: Record<string, string | number>
+  ): void {
+    this.observability.emitEvent({ kind, name, value, ts: Date.now(), attrs })
+  }
+
+  private emitQueueGauges(state?: DispatchQueueState): void {
+    const snapshot = state ?? this.queue.getState()
+    this.emitMetric('gauge', 'queue.in_flight', snapshot.inFlight, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.pending', snapshot.pending, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.blocked', snapshot.blocked, this.queueAttrs)
+  }
+
+  private emitWorkersActive(): void {
+    const activeWorkers = this.workers.filter(worker => worker !== null).length
+    this.emitMetric('gauge', 'workers.active', activeWorkers, this.taskAttrs)
+  }
+
+  private getWorkerAttrs(workerIndex: number): Record<string, string | number> {
+    return { ...this.taskAttrs, 'worker.index': workerIndex }
+  }
+
+  private createSpan(callId: string, method: string, trace?: TraceContext): SpanRecord {
+    return {
+      spanId: callId,
+      callId,
+      trace,
+      method,
+      startTime: this.observability.now(),
+      queueWaitMs: 0,
+      attemptCount: 0,
+      ended: false,
+      sampled: this.observability.shouldSampleSpan(trace, callId),
+    }
+  }
+
+  private onDispatchAttempt(payload: WorkerCall, queueWaitMs: number): void {
+    const span = payload.span
+    if (span && !span.ended) {
+      span.attemptCount += 1
+      span.queueWaitMs += queueWaitMs
+      span.queueWaitLastMs = queueWaitMs
+    }
+    this.emitMetric('counter', 'task.dispatch.total', 1, this.taskAttrs)
+    this.emitMetric('histogram', 'queue.wait_ms', queueWaitMs, this.queueAttrs)
+  }
+
+  private endSpan(
+    span: SpanRecord | undefined,
+    status: SpanStatus,
+    errorKind?: SpanErrorKind,
+    error?: unknown
+  ): void {
+    if (!span || span.ended) return
+    span.ended = true
+    const endTime = this.observability.now()
+    const durationMs = endTime - span.startTime
+
+    if (span.attemptCount === 0 && span.queueWaitMs === 0) {
+      const wait = durationMs
+      span.queueWaitMs = wait
+      span.queueWaitLastMs = wait
+    }
+
+    if (status === 'ok') {
+      this.emitMetric('counter', 'task.success.total', 1, this.taskAttrs)
+    } else if (status === 'canceled') {
+      this.emitMetric('counter', 'task.canceled.total', 1, this.taskAttrs)
+    } else if (status === 'error' && errorKind !== 'queue') {
+      this.emitMetric('counter', 'task.failure.total', 1, this.taskAttrs)
+    }
+
+    this.emitMetric('histogram', 'task.duration_ms', durationMs, this.taskAttrs)
+
+    if (!span.sampled || !this.observability.spansEnabled) return
+
+    const resolvedErrorKind = errorKind ?? (error ? classifyErrorKind(error) : undefined)
+    const errorMessage = error ? stringifyError(error) : undefined
+
+    this.observability.emitMeasure('atelier:span', span.startTime, endTime, {
+      spanId: span.spanId,
+      traceId: span.trace?.id,
+      traceName: span.trace?.name,
+      callId: span.callId,
+      taskId: this.taskId,
+      taskName: this.taskName,
+      taskType: 'parallel',
+      method: span.method,
+      workerIndex: span.workerIndex,
+      queueWaitMs: span.queueWaitMs,
+      queueWaitLastMs: span.queueWaitLastMs,
+      attemptCount: span.attemptCount,
+      status,
+      errorKind: resolvedErrorKind,
+      error: errorMessage,
+    })
+
+    this.observability.emitEvent({
+      kind: 'span',
+      name: 'atelier:span',
+      ts: Date.now(),
+      spanId: span.spanId,
+      traceId: span.trace?.id,
+      traceName: span.trace?.name,
+      callId: span.callId,
+      taskId: this.taskId,
+      taskName: this.taskName,
+      taskType: 'parallel',
+      method: span.method,
+      workerIndex: span.workerIndex,
+      queueWaitMs: span.queueWaitMs,
+      queueWaitLastMs: span.queueWaitLastMs,
+      attemptCount: span.attemptCount,
+      durationMs,
+      status,
+      errorKind: resolvedErrorKind,
+      error: errorMessage,
+    })
   }
 
   private initializePool(): void {
@@ -183,13 +326,8 @@ export class WorkerPool<T = any> implements TaskExecutor {
       this.attachCrashListeners(index, workerInstance)
       this.crashedWorkerIndices.delete(index)
       this.workerStatus = 'running'
-      this.telemetry?.({
-        type: 'worker:spawn',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex: index,
-        ts: Date.now(),
-      })
+      this.emitMetric('counter', 'worker.spawn.total', 1, this.getWorkerAttrs(index))
+      this.emitWorkersActive()
     }
     // biome-ignore lint/style/noNonNullAssertion: initializeWorker() guarantees worker is initialized
     return this.workers[index]!
@@ -311,14 +449,8 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.lastCrash = { ts: Date.now(), error: cause, workerIndex: index }
     this.workerStatus = 'crashed'
 
-    this.telemetry?.({
-      type: 'worker:crash',
-      taskId: this.taskId,
-      taskName: this.taskName,
-      workerIndex: index,
-      ts: Date.now(),
-      error: cause,
-    })
+    this.emitMetric('counter', 'worker.crash.total', 1, this.getWorkerAttrs(index))
+    this.emitWorkersActive()
 
     // Tear down the crashed worker and proxy.
     this.detachCrashListeners(index)
@@ -349,14 +481,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
       if (rejected.length > 0) {
         for (const payload of rejected) {
           this.callIdToWorkerIndex.delete(payload.callId)
-          this.telemetry?.({
-            type: 'error',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            workerIndex: index,
-            ts: Date.now(),
-            error: crashError,
-          })
+          this.endSpan(payload.span, 'error', 'crash', crashError)
         }
       }
       this.scheduleWorkerRestart(index)
@@ -369,16 +494,9 @@ export class WorkerPool<T = any> implements TaskExecutor {
         payload => this.callIdToWorkerIndex.get(payload.callId) === index
       )
       if (requeued.length > 0) {
+        this.emitMetric('counter', 'task.requeue.total', requeued.length, this.taskAttrs)
         for (const payload of requeued) {
           this.callIdToWorkerIndex.delete(payload.callId)
-          this.telemetry?.({
-            type: 'error',
-            taskId: this.taskId,
-            taskName: this.taskName,
-            workerIndex: index,
-            ts: Date.now(),
-            error: crashError,
-          })
         }
       }
       this.scheduleWorkerRestart(index)
@@ -392,12 +510,16 @@ export class WorkerPool<T = any> implements TaskExecutor {
   private haltTask(error: Error): void {
     this.halted = true
     this.haltedError = error
-    this.queue.rejectAll(error)
+    const rejected = this.queue.rejectAll(error)
+    const errorKind = classifyErrorKind(error)
+    for (const payload of [...rejected.pending, ...rejected.blocked, ...rejected.inFlight]) {
+      this.endSpan(payload.span, 'error', errorKind, error)
+    }
     this.queue.pause()
     this.terminateWorkers()
   }
 
-  private async dispatchToWorker(payload: WorkerCall, queueWaitMs: number): Promise<unknown> {
+  private async dispatchToWorker(payload: WorkerCall, _queueWaitMs: number): Promise<unknown> {
     if (this.halted) {
       throw this.haltedError ?? new Error('Task is halted after worker crash')
     }
@@ -426,6 +548,9 @@ export class WorkerPool<T = any> implements TaskExecutor {
       throw new Error('Worker does not expose __dispatch (atelier harness missing)')
     }
     this.callIdToWorkerIndex.set(payload.callId, workerIndex)
+    if (payload.span && !payload.span.ended) {
+      payload.span.workerIndex = workerIndex
+    }
 
     // Auto-detect or use explicit transferables for arguments
     const argTransferables =
@@ -433,28 +558,11 @@ export class WorkerPool<T = any> implements TaskExecutor {
     const argsToSend =
       argTransferables.length > 0 ? transfer(payload.args, argTransferables) : payload.args
 
-    const start = Date.now()
     this.queueDepthByWorker[workerIndex] += 1
-    this.telemetry?.({
-      type: 'dispatch',
-      taskId: this.taskId,
-      taskName: this.taskName,
-      workerIndex,
-      ts: start,
-      queueWaitMs,
-    })
 
     try {
       const result = await workerDispatch(payload.callId, payload.method, argsToSend, payload.key)
-      const durationMs = Date.now() - start
-      this.telemetry?.({
-        type: 'success',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex,
-        ts: Date.now(),
-        durationMs,
-      })
+      this.endSpan(payload.span, 'ok')
       this.resetCrashTracking()
 
       // Auto-detect or skip transferables for result
@@ -467,16 +575,11 @@ export class WorkerPool<T = any> implements TaskExecutor {
       }
       return result
     } catch (error) {
-      const durationMs = Date.now() - start
-      this.telemetry?.({
-        type: 'error',
-        taskId: this.taskId,
-        taskName: this.taskName,
-        workerIndex,
-        ts: Date.now(),
-        durationMs,
-        error,
-      })
+      if (isAbortError(error)) {
+        this.endSpan(payload.span, 'canceled', 'abort', error)
+      } else {
+        this.endSpan(payload.span, 'error', classifyErrorKind(error), error)
+      }
       throw error
     } finally {
       this.queueDepthByWorker[workerIndex] = Math.max(
@@ -493,6 +596,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
       return Promise.reject(this.haltedError ?? new Error('Task is halted after worker crash'))
     }
     const callId = `${this.taskId}-${this.callIdCounter++}`
+    const span = this.createSpan(callId, method, options?.trace)
     return this.queue.enqueue(
       {
         callId,
@@ -501,6 +605,8 @@ export class WorkerPool<T = any> implements TaskExecutor {
         key: options?.key,
         transfer: options?.transfer,
         transferResult: options?.transferResult,
+        trace: options?.trace,
+        span,
       },
       options
     )
@@ -590,13 +696,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
       const workerInstance = this.workerInstances[i]
       if (workerInstance) {
         workerInstance.terminate()
-        this.telemetry?.({
-          type: 'worker:terminate',
-          taskId: this.taskId,
-          taskName: this.taskName,
-          workerIndex: i,
-          ts: Date.now(),
-        })
+        this.emitMetric('counter', 'worker.terminate.total', 1, this.getWorkerAttrs(i))
       }
     }
     this.workers = []
@@ -605,6 +705,7 @@ export class WorkerPool<T = any> implements TaskExecutor {
     this.callIdToWorkerIndex.clear()
     this.workerTerminating = Array(this.poolSize).fill(false)
     this.workerStatus = 'stopped'
+    this.emitWorkersActive()
   }
 
   private scheduleIdleStop(): void {

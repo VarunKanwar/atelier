@@ -20,11 +20,9 @@ export interface TaskConfig {
   crashPolicy?: CrashPolicy
   // Max consecutive crashes before escalating to fail-task.
   crashMaxRetries?: number
-  // Optional label and stable ID for telemetry/UI.
+  // Optional label and stable ID for observability/UI.
   taskName?: string
   taskId?: string
-  // Optional telemetry sink for dev/debug observability.
-  telemetry?: TelemetrySink
   // Maximum number of in-flight calls dispatched to workers.
   // Defaults: poolSize for parallel, 1 for singleton.
   maxInFlight?: number
@@ -85,6 +83,8 @@ export interface TaskExecutor {
 export type TaskDispatchOptions = {
   key?: string
   signal?: AbortSignal
+  /** Optional trace context to associate this call with a trace. */
+  trace?: TraceContext
   /**
    * Transferable objects to transfer (zero-copy) instead of cloning.
    *
@@ -107,42 +107,100 @@ export type TaskDispatchOptions = {
   transferResult?: boolean
 }
 
-// Minimal event set to power lightweight observability.
-export type TaskEventType =
-  | 'blocked'
-  | 'queued'
-  | 'dispatch'
-  | 'success'
-  | 'error'
-  | 'rejected'
-  | 'canceled'
-  | 'worker:spawn'
-  | 'worker:crash'
-  | 'worker:terminate'
+export type QueuePolicy = 'block' | 'reject' | 'drop-latest' | 'drop-oldest'
 
-export type TaskEvent = {
-  type: TaskEventType
-  taskId: string
-  taskName?: string
-  workerIndex?: number
-  /** Milliseconds since epoch. */
-  ts: number
-  /** Duration of the task call, when applicable. */
-  durationMs?: number
-  /** Time spent waiting in queue before dispatch, if any. */
-  queueWaitMs?: number
-  /** Current pending queue depth, if applicable. */
-  queueDepth?: number
-  /** Max pending queue depth, if applicable. */
-  queueLimit?: number
-  /** Current blocked queue depth, if applicable. */
-  blockedDepth?: number
-  /** Phase of cancellation, when applicable. */
-  canceledPhase?: 'queued' | 'blocked' | 'in-flight'
-  /** Original error object, if any. */
+export type TraceEndStatus = 'ok' | 'error' | 'canceled'
+
+/** Options passed to TraceContext.end() to record status/error details. */
+export type TraceEndOptions = {
+  status?: TraceEndStatus
   error?: unknown
 }
 
-export type QueuePolicy = 'block' | 'reject' | 'drop-latest' | 'drop-oldest'
+/**
+ * Explicit trace context. Create via runtime.createTrace() or runtime.runWithTrace().
+ * Attach to calls using task.with({ trace }).
+ */
+export type TraceContext = {
+  id: string
+  name?: string
+  sampled: boolean
+  end: (options?: TraceEndOptions) => void
+}
 
-export type TelemetrySink = (event: TaskEvent) => void
+/** Controls span emission and sampling. */
+export type SpansConfig =
+  | 'auto'
+  | 'on'
+  | 'off'
+  | {
+      mode?: 'auto' | 'on' | 'off'
+      sampleRate?: number
+    }
+
+/** Observability configuration for the runtime. */
+export type ObservabilityConfig = {
+  spans?: SpansConfig
+}
+
+/** Internal observability helpers passed to executors. */
+export type ObservabilityContext = {
+  spansEnabled: boolean
+  sampleRate: number
+  now: () => number
+  emitEvent: (event: RuntimeEvent) => void
+  emitMeasure: (name: string, start: number, end: number, detail?: object) => void
+  shouldSampleSpan: (trace: TraceContext | undefined, spanId: string) => boolean
+}
+
+/** Counter/gauge/histogram events emitted from the runtime. */
+export type MetricEvent = {
+  kind: 'counter' | 'gauge' | 'histogram'
+  name: string
+  value: number
+  /** Milliseconds since epoch. */
+  ts: number
+  attrs?: Record<string, string | number>
+}
+
+export type SpanStatus = 'ok' | 'error' | 'canceled'
+export type SpanErrorKind = 'abort' | 'queue' | 'crash' | 'exception'
+
+/** Mirror of a span measure for reliable consumption. */
+export type SpanEvent = {
+  kind: 'span'
+  name: 'atelier:span'
+  ts: number
+  spanId: string
+  traceId?: string
+  traceName?: string
+  callId: string
+  taskId: string
+  taskName?: string
+  taskType: TaskType
+  method: string
+  workerIndex?: number
+  queueWaitMs?: number
+  queueWaitLastMs?: number
+  attemptCount: number
+  durationMs?: number
+  status: SpanStatus
+  errorKind?: SpanErrorKind
+  error?: string
+}
+
+/** Trace end event emitted when trace.end() is called. */
+export type TraceEvent = {
+  kind: 'trace'
+  name: 'atelier:trace'
+  ts: number
+  traceId: string
+  traceName?: string
+  durationMs?: number
+  status: TraceEndStatus
+  errorKind?: SpanErrorKind
+  error?: string
+}
+
+/** Union of all observability events emitted by the runtime. */
+export type RuntimeEvent = MetricEvent | SpanEvent | TraceEvent

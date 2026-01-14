@@ -15,7 +15,7 @@ backpressure, and cancellation without a pipeline DSL.
 - Keyed cancellation that propagates across task queues and pipelines
 - Cooperative worker-side cancellation via a small harness
 - Worker crash detection with an explicit recovery policy
-- Runtime-scoped observability snapshots
+- Runtime-scoped observability snapshots and event stream
 
 ## Core concepts
 
@@ -128,18 +128,28 @@ const runtime = createTaskRuntime()
 const snapshot = runtime.getRuntimeSnapshot()
 ```
 
-For latency and queue wait percentiles, attach a telemetry store:
+For metrics, spans, and trace timing, use the event stream plus optional
+Performance API measures:
 
 ```ts
-import { createTelemetryStore } from '@varunkanwar/atelier'
+const runtime = createTaskRuntime({
+  observability: { spans: { mode: 'auto', sampleRate: 1 } },
+})
 
-const telemetry = createTelemetryStore()
-const task = runtime.defineTask({
-  type: 'singleton',
-  worker: () => new Worker('./worker.ts', { type: 'module' }),
-  telemetry: telemetry.emit,
+const unsubscribe = runtime.subscribeEvents(event => {
+  // MetricEvent | SpanEvent | TraceEvent
+})
+
+await runtime.runWithTrace('doc:123', async trace => {
+  await resize.with({ trace }).process(image)
 })
 ```
+
+Recommended usage:
+- Use `subscribeEvents()` as the canonical telemetry stream (counters, gauges,
+  histograms, and span/trace events with full metadata).
+- Use `PerformanceObserver` only for profiling/devtools integrations. Measures
+  are best-effort and may drop entries or omit `detail` in some browsers.
 
 ## API summary
 
@@ -147,6 +157,8 @@ const task = runtime.defineTask({
   - `defineTask<T>(config: TaskConfig): Task<T>` (per-call options via `task.with(...)`)
   - `abortTaskController: AbortTaskController`
   - `getRuntimeSnapshot()` / `subscribeRuntimeSnapshot()`
+  - `subscribeEvents(listener)`
+  - `createTrace(name?)` / `runWithTrace(name, fn)`
 - `createTaskWorker(handlers)`
   - `TaskContext` (signal, key, callId, `throwIfAborted()`)
   - `StripTaskContext<T>` removes the worker-only context from the public type
@@ -155,7 +167,8 @@ const task = runtime.defineTask({
 
 ## Docs
 
-- [Design](./docs/design.md) - Architecture and design decisions
+- [Design](./docs/design/README.md) - Architecture and design decisions
+- [Observability Design](./docs/design/observability.md) - Telemetry model and decisions
 - [API Reference](./docs/api-reference.md) - Complete API documentation
 - [Testing](./docs/testing.md) - Testing patterns
 
@@ -168,7 +181,7 @@ cd atelier
 bun install
 
 # Run tests
-bun test
+bun run test
 
 # Lint and format
 bun run check:fix

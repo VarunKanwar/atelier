@@ -13,13 +13,14 @@
  *   - drop-latest: reject newest
  *   - drop-oldest: evict oldest pending entry
  * - A pump loop dispatches work when capacity is available.
- * - Hooks emit telemetry-friendly events (queued/dispatch/reject/cancel).
+ * - Hooks emit observability-friendly events (queued/dispatch/reject/cancel).
  *
  * Usage:
  * - Instantiate with a `run(payload, queueWaitMs)` handler.
  * - Call `enqueue(payload, options)` to schedule work (optionally abortable).
  */
 
+import { now as getNow } from './observability-utils'
 import type { QueuePolicy, TaskDispatchOptions } from './types'
 
 export type DispatchQueueState = {
@@ -39,6 +40,7 @@ export type DispatchQueueHooks<T> = {
   onDispatch?: (payload: T, queueWaitMs: number) => void
   onReject?: (payload: T, error: Error) => void
   onCancel?: (payload: T, phase: 'queued' | 'blocked' | 'in-flight') => void
+  onStateChange?: (state: DispatchQueueState) => void
   onIdle?: () => void
   onActive?: () => void
 }
@@ -97,7 +99,7 @@ export class DispatchQueue<T> {
     return new Promise((resolve, reject) => {
       const entry: QueueEntry<T> = {
         payload,
-        enqueuedAt: Date.now(),
+        enqueuedAt: getNow(),
         resolve,
         reject,
         signal,
@@ -234,7 +236,7 @@ export class DispatchQueue<T> {
       }
 
       // Reset queue wait time for the requeued attempt.
-      entry.enqueuedAt = Date.now()
+      entry.enqueuedAt = getNow()
       requeued.push(entry.payload)
 
       if (this.pending.length >= this.maxQueueDepth) {
@@ -295,7 +297,9 @@ export class DispatchQueue<T> {
     return rejected
   }
 
-  rejectAll(error: Error): { inFlight: T[] } {
+  rejectAll(error: Error): { pending: T[]; blocked: T[]; inFlight: T[] } {
+    const pendingPayloads: T[] = []
+    const blockedPayloads: T[] = []
     const inFlightPayloads: T[] = []
     for (const entry of this.pending.splice(0, this.pending.length)) {
       if (entry.queuedAbortHandler && entry.signal) {
@@ -303,6 +307,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
       entry.reject(error)
+      pendingPayloads.push(entry.payload)
     }
     for (const entry of this.blocked.splice(0, this.blocked.length)) {
       if (entry.queuedAbortHandler && entry.signal) {
@@ -310,6 +315,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
       entry.reject(error)
+      blockedPayloads.push(entry.payload)
     }
     for (const entry of Array.from(this.inFlight)) {
       this.inFlight.delete(entry)
@@ -321,7 +327,7 @@ export class DispatchQueue<T> {
       inFlightPayloads.push(entry.payload)
     }
     this.notifyStateChange()
-    return { inFlight: inFlightPayloads }
+    return { pending: pendingPayloads, blocked: blockedPayloads, inFlight: inFlightPayloads }
   }
 
   isIdle(): boolean {
@@ -343,7 +349,7 @@ export class DispatchQueue<T> {
         entry.queuedAbortHandler = undefined
       }
 
-      const queueWaitMs = Date.now() - entry.enqueuedAt
+      const queueWaitMs = getNow() - entry.enqueuedAt
       entry.state = 'in-flight'
       // Bump attempt so any completion from a previous dispatch is ignored.
       entry.attempt += 1
@@ -413,6 +419,7 @@ export class DispatchQueue<T> {
   }
 
   private notifyStateChange(): void {
+    this.hooks.onStateChange?.(this.getState())
     // Emit idle/active transitions for idle-timeout handling.
     const idle = this.isIdle()
     if (idle && !this.wasIdle) {
