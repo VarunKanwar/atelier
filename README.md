@@ -167,7 +167,8 @@ Recommended usage:
 
 ## Docs
 
-- [Design](./docs/design.md) - Architecture and design decisions
+- [Design](./docs/design/README.md) - Architecture and design decisions
+- [Observability Design](./docs/design/observability.md) - Telemetry model and decisions
 - [API Reference](./docs/api-reference.md) - Complete API documentation
 - [Testing](./docs/testing.md) - Testing patterns
 
