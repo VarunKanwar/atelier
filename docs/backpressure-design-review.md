@@ -397,6 +397,46 @@ await Promise.all(results)
 | Memory usage | Unbounded with `block` | Bounded |
 | User mental model | Confusing (two queues) | Simple (one bounded buffer) |
 
+### Why Not Just Remove Queues Entirely?
+
+An alternative approach: remove queues, rely purely on async/await + Comlink.
+
+**What raw Comlink gives you:**
+```typescript
+const worker = new Worker(...)
+const api = Comlink.wrap(worker)
+await api.process(data)  // Sends message, awaits response
+```
+
+If you call `api.process()` 100 times concurrently, all 100 messages go to the worker's message queue. The worker processes them one at a time. The browser's message queue IS unbounded, but:
+- Payloads are transferred to the worker (not duplicated in main thread)
+- The worker handles them in order
+- All promises eventually resolve
+
+**Why queues are still valuable:**
+
+| Capability | Raw Comlink | With Queue |
+|------------|-------------|------------|
+| Distribute work across N workers | Manual | Automatic (round-robin) |
+| Track which worker is free | Manual | Automatic |
+| Know how backed up the system is | No visibility | Observable (`pending`, `inFlight`) |
+| Crash recovery (requeue in-flight work) | Manual | Built-in |
+| Load shedding (reject/drop when overloaded) | Not possible | `reject` / `drop-*` policies |
+| Limit memory usage from queued payloads | Not possible | Bounded queue |
+
+**The key insight:** For a single worker, queues add observability and load shedding. For worker pools, queues are essential for work distribution and crash recovery.
+
+**Our approach is better than no queues because:**
+1. Worker pools need coordination - queues provide it
+2. Crash recovery needs to know what was in-flight - queues track it
+3. Observability needs queue depth metrics - queues expose them
+4. True blocking gives bounded memory - raw Comlink doesn't
+
+**Our approach is better than current queues because:**
+1. `block` policy actually blocks (no unbounded `blocked` queue)
+2. Sensible defaults mean users don't configure anything
+3. Backpressure propagates automatically via async/await
+
 ### Summary
 
 The queue abstraction IS valuable for:
@@ -404,6 +444,7 @@ The queue abstraction IS valuable for:
 - Crash recovery (tracking in-flight work)
 - Observability (queue depth metrics)
 - Load shedding (reject/drop policies)
+- Bounded memory usage (true blocking)
 
 The queue abstraction should ALSO provide:
 - Automatic backpressure via sensible defaults
@@ -548,16 +589,15 @@ type DispatchQueueState = {
 
 1. **Default queue depths**: Is `poolSize * 2` for pools and `2` for singletons the right default? Should it be configurable globally?
 
-2. **Migration path**: This changes default behavior. Should we:
-   - Make it opt-in initially via a flag?
-   - Release as a major version bump?
-   - Document the change clearly and ship it?
+2. **Observability**: Should we expose "waiting for capacity" count in metrics/state? (Recommended: yes, for debugging)
 
-3. **Observability**: Should we expose "waiting for capacity" count in metrics/state? (Recommended: yes)
+3. **Are there edge cases we're missing?** The new behavior changes how the system responds under load. Are there scenarios where unbounded queuing was actually desirable?
 
-4. **Naming**: Should we rename `block` policy to something clearer like `backpressure` or `wait`?
+### Decisions Already Made
 
-5. **parallelLimit utility**: Should we keep exporting `parallelLimit` for users who want explicit control, or is it now redundant?
+- **No migration concerns**: We don't care about backwards compatibility for this change
+- **Delete `parallelLimit`**: With automatic backpressure, this utility is redundant
+- **Keep `block` naming**: No rename for now
 
 ---
 
