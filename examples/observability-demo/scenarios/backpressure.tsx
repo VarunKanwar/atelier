@@ -1,5 +1,4 @@
 import {
-  Badge,
   Box,
   Button,
   createListCollection,
@@ -14,27 +13,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { createTaskRuntime } from '../../../src'
 import type { QueuePolicy } from '../../../src/types'
-import RuntimeSnapshotPanel from '../RuntimeSnapshotPanel'
 import type { FlowGraph } from '../harness/flow-types'
 import ScenarioShell from '../harness/ScenarioShell'
-import ScenarioTabs from '../harness/ScenarioTabs'
+import RuntimeSnapshotPanel from '../RuntimeSnapshotPanel'
 import {
   createImagePipelineTasks,
   disposeImagePipelineTasks,
   generateImages,
-  runImagePipeline,
   type PipelineTasks,
+  runImagePipeline,
 } from '../workflows/image-pipeline'
-import { clampNumber } from './utils'
 import type { ScenarioComponentProps, ScenarioDefinition } from './types'
+import { clampNumber } from './utils'
 
 type RunStatus = 'idle' | 'running' | 'done'
-
-type ResultItem = {
-  id: string
-  status: 'fulfilled' | 'rejected'
-  message: string
-}
 
 const graph: FlowGraph = {
   nodes: [
@@ -57,19 +49,15 @@ const queuePolicies: { label: string; value: QueuePolicy }[] = [
 ]
 
 const BackpressureScenario = (_props: ScenarioComponentProps) => {
-  const runtime = useMemo(
-    () => createTaskRuntime({ observability: { spans: 'off' } }),
-    []
-  )
+  const runtime = useMemo(() => createTaskRuntime({ observability: { spans: 'off' } }), [])
   const tasksRef = useRef<PipelineTasks | null>(null)
   const [queuePolicy, setQueuePolicy] = useState<QueuePolicy>('block')
   const [maxQueueDepth, setMaxQueueDepth] = useState(18)
   const [batchSize, setBatchSize] = useState(30)
   const [concurrencyLimit, setConcurrencyLimit] = useState(6)
-  const [status, setStatus] = useState<RunStatus>('idle')
+  const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [completed, setCompleted] = useState(0)
   const [failed, setFailed] = useState(0)
-  const [results, setResults] = useState<ResultItem[]>([])
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [finishedAt, setFinishedAt] = useState<number | null>(null)
   const runIdRef = useRef(0)
@@ -108,8 +96,7 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
 
   const handleRestartTasks = useCallback(() => {
     buildTasks()
-    setStatus('idle')
-    setResults([])
+    setRunStatus('idle')
     setCompleted(0)
     setFailed(0)
     setStartedAt(null)
@@ -117,7 +104,7 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
   }, [buildTasks])
 
   const handleRun = useCallback(async () => {
-    if (status === 'running') return
+    if (runStatus === 'running') return
     const tasks = tasksRef.current
     if (!tasks) return
 
@@ -125,10 +112,9 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
     const resolvedBatch = clampNumber(batchSize, 30, 1, 200)
     const resolvedLimit = clampNumber(concurrencyLimit, 6, 1, 64)
 
-    setStatus('running')
+    setRunStatus('running')
     setCompleted(0)
     setFailed(0)
-    setResults([])
     setStartedAt(Date.now())
     setFinishedAt(null)
 
@@ -143,38 +129,17 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
         if (runIdRef.current !== runId) break
         if (result.status === 'fulfilled') {
           setCompleted(prev => prev + 1)
-          setResults(prev =>
-            [
-              {
-                id: result.item.name,
-                status: 'fulfilled',
-                message: `${result.item.name}: ${result.value.objects.join(', ')}`,
-              },
-              ...prev,
-            ].slice(0, 6)
-          )
         } else {
           setFailed(prev => prev + 1)
-          const message = result.error instanceof Error ? result.error.message : String(result.error)
-          setResults(prev =>
-            [
-              {
-                id: result.item.name,
-                status: 'rejected',
-                message: `${result.item.name}: ${message}`,
-              },
-              ...prev,
-            ].slice(0, 6)
-          )
         }
       }
     } finally {
       if (runIdRef.current === runId) {
-        setStatus('done')
+        setRunStatus('done')
         setFinishedAt(Date.now())
       }
     }
-  }, [batchSize, concurrencyLimit, status])
+  }, [batchSize, concurrencyLimit, runStatus])
 
   const durationMs = useMemo(() => {
     if (!startedAt) return 0
@@ -188,23 +153,18 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
     return seconds > 0 ? completed / seconds : null
   }, [completed, durationMs, finishedAt])
 
-  const controls = (
-    <Box bg="white" borderWidth="1px" borderColor="gray.200" rounded="xl" p={5}>
-      <Stack gap={4}>
-        <ScenarioTabs />
-        <Stack gap={1}>
-          <Text fontWeight="semibold">Workload</Text>
-          <Text fontSize="sm" color="gray.600">
-            Increase concurrency to apply pressure on the bottleneck queue.
-          </Text>
-        </Stack>
+  const Divider = () => <Box borderTopWidth="1px" borderColor="gray.200" />
 
+  const controls = (
+    <Stack gap={0}>
+      <Box p={4}>
         <Stack gap={3}>
           <Box>
             <Text fontSize="xs" color="gray.500" mb={1}>
               Batch size
             </Text>
             <Input
+              size="sm"
               type="number"
               value={batchSize}
               min={1}
@@ -217,6 +177,7 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
               Pipeline concurrency
             </Text>
             <Input
+              size="sm"
               type="number"
               value={concurrencyLimit}
               min={1}
@@ -225,17 +186,18 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
             />
           </Box>
         </Stack>
+      </Box>
 
-        <Stack gap={2}>
-          <Text fontWeight="semibold">Bottleneck queue</Text>
-          <Text fontSize="xs" color="gray.500">
-            Applies to the singleton analyze worker.
-          </Text>
+      <Divider />
+
+      <Box p={4}>
+        <Stack gap={3}>
           <Box>
             <Text fontSize="xs" color="gray.500" mb={1}>
               Max queue depth
             </Text>
             <Input
+              size="sm"
               type="number"
               value={maxQueueDepth}
               min={1}
@@ -278,108 +240,75 @@ const BackpressureScenario = (_props: ScenarioComponentProps) => {
                 </Select.Positioner>
               </Portal>
             </Select.Root>
-            <Text fontSize="xs" color="gray.500" mt={2}>
-              Restart tasks to apply queue policy changes.
-            </Text>
           </Box>
         </Stack>
+      </Box>
 
+      <Divider />
+
+      <Box p={4}>
         <HStack gap={2}>
-          <Button onClick={handleRun} disabled={status === 'running'} colorScheme="blue">
-            {status === 'running' ? 'Running…' : 'Run'}
+          <Button
+            size="sm"
+            onClick={handleRun}
+            disabled={runStatus === 'running'}
+            colorScheme="blue"
+          >
+            {runStatus === 'running' ? 'Running…' : 'Run'}
           </Button>
-          <Button variant="outline" onClick={handleRestartTasks}>
-            Restart tasks
+          <Button size="sm" variant="outline" onClick={handleRestartTasks}>
+            Restart
           </Button>
         </HStack>
-      </Stack>
-    </Box>
+      </Box>
+    </Stack>
   )
 
-  const resultsPanel = (
-    <Box bg="white" borderWidth="1px" borderColor="gray.200" rounded="xl" p={5}>
-      <Stack gap={3}>
-        <HStack justify="space-between">
-          <Text fontWeight="semibold">Recent results</Text>
-          <Badge bg="gray.100" color="gray.700">
-            {results.length} shown
-          </Badge>
-        </HStack>
-        <HStack justify="space-between" fontSize="sm" color="gray.600">
-          <Text>Completed / failed</Text>
-          <Text fontWeight="semibold">
-            {completed} / {failed}
-          </Text>
-        </HStack>
-        <HStack justify="space-between" fontSize="sm" color="gray.600">
-          <Text>Duration</Text>
-          <Text fontWeight="semibold">{(durationMs / 1000).toFixed(1)}s</Text>
-        </HStack>
-        <HStack justify="space-between" fontSize="sm" color="gray.600">
+  const status = (
+    <HStack gap={6} fontSize="sm" color="gray.600">
+      <HStack gap={2}>
+        <Text>Completed</Text>
+        <Text fontWeight="semibold" color="gray.800">
+          {completed}
+        </Text>
+      </HStack>
+      <HStack gap={2}>
+        <Text>Failed</Text>
+        <Text fontWeight="semibold" color="gray.800">
+          {failed}
+        </Text>
+      </HStack>
+      <HStack gap={2}>
+        <Text>Duration</Text>
+        <Text fontWeight="semibold" color="gray.800">
+          {(durationMs / 1000).toFixed(1)}s
+        </Text>
+      </HStack>
+      {throughput !== null && (
+        <HStack gap={2}>
           <Text>Throughput</Text>
-          <Text fontWeight="semibold">{throughput ? `${throughput.toFixed(2)} img/s` : '—'}</Text>
-        </HStack>
-        {results.length === 0 ? (
-          <Text fontSize="sm" color="gray.500">
-            Run the scenario to see recent completions.
+          <Text fontWeight="semibold" color="gray.800">
+            {throughput.toFixed(1)} img/s
           </Text>
-        ) : (
-          <Stack gap={2}>
-            {results.map(result => (
-              <HStack key={result.id} justify="space-between">
-                <Text fontSize="sm" color="gray.700">
-                  {result.message}
-                </Text>
-                <Badge
-                  bg={result.status === 'fulfilled' ? 'green.50' : 'red.50'}
-                  color={result.status === 'fulfilled' ? 'green.700' : 'red.700'}
-                >
-                  {result.status === 'fulfilled' ? 'ok' : 'error'}
-                </Badge>
-              </HStack>
-            ))}
-          </Stack>
-        )}
-      </Stack>
-    </Box>
-  )
-
-  const notes = (
-    <Box bg="white" borderWidth="1px" borderColor="gray.200" rounded="xl" p={5}>
-      <Stack gap={2}>
-        <Text fontWeight="semibold">What to try</Text>
-        <Text fontSize="sm" color="gray.600">
-          1. Raise pipeline concurrency above 6.
-        </Text>
-        <Text fontSize="sm" color="gray.600">
-          2. Lower max queue depth to force drops.
-        </Text>
-        <Text fontSize="sm" color="gray.600">
-          3. Switch policy to drop-latest or reject and observe pending counts.
-        </Text>
-      </Stack>
-    </Box>
+        </HStack>
+      )}
+    </HStack>
   )
 
   return (
     <ScenarioShell
-      title="Backpressure 101"
-      summary="See how a bottlenecked worker queue absorbs load and how queue policies behave under pressure."
-      goal="Understand queue depth, pending vs blocked work, and policy tradeoffs."
       controls={controls}
-      rightPanel={<RuntimeSnapshotPanel runtime={runtime} onlyOnChange graph={graph} />}
-      results={resultsPanel}
-      notes={notes}
+      main={<RuntimeSnapshotPanel runtime={runtime} onlyOnChange graph={graph} />}
+      status={status}
     />
   )
 }
 
 export const backpressureScenario: ScenarioDefinition = {
   meta: {
-    id: 'backpressure',
-    title: 'Backpressure 101',
-    summary: 'Explore queue depth and policies under a real bottleneck.',
-    goal: 'See pending vs blocked work and how queue policies respond.',
+    id: 'queue-policies',
+    title: 'Queue policies',
+    summary: 'Explore queue depth and policies under backpressure.',
   },
   Component: BackpressureScenario,
 }

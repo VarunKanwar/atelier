@@ -1,32 +1,31 @@
+import { Box, HStack, Progress, Stack, Text } from '@chakra-ui/react'
+import type { EdgeProps, NodeProps } from '@xyflow/react'
 import {
-  Box,
-  HStack,
-  Progress,
-  Stack,
-  Text,
-} from '@chakra-ui/react'
-import {
-  ReactFlow,
-  Handle,
   Background,
-  Controls,
-  EdgeLabelRenderer,
   BaseEdge,
-  MarkerType,
-  Position,
+  Controls,
+  type Edge,
+  EdgeLabelRenderer,
   getBezierPath,
+  Handle,
+  MarkerType,
+  type Node,
+  Position,
+  ReactFlow,
   useEdgesState,
   useNodesState,
-  type Edge,
-  type EdgeProps,
-  type Node,
-  type NodeProps,
 } from '@xyflow/react'
 import { useEffect, useMemo } from 'react'
 
-import type { RuntimeSnapshot } from '../../../src'
-import type { FlowGraph } from './flow-types'
+import type { RuntimeSnapshot, RuntimeTaskSnapshot } from '../../../src'
 import { layoutFlowGraph } from './flow-layout'
+import type { FlowGraph } from './flow-types'
+
+type TaskNodeData = { label: string; kind: string; state?: RuntimeTaskSnapshot }
+type TaskNodeType = Node<TaskNodeData, 'task'>
+
+type QueueEdgeData = { label: string; pending: number; blocked: number; maxDepth?: number }
+type QueueEdgeType = Edge<QueueEdgeData, 'queue'>
 
 export type ScenarioFlowCanvasProps = {
   graph: FlowGraph
@@ -85,7 +84,7 @@ const ActivityBars = ({ values }: { values: number[] }) => {
   )
 }
 
-const TaskNode = ({ data }: NodeProps<{ label: string; kind: string; state?: RuntimeSnapshot['tasks'][number] }>) => {
+const TaskNode = ({ data }: NodeProps<TaskNodeType>) => {
   const state = data.state
   const totalWorkers = state?.totalWorkers ?? 0
   const inFlight = state?.queueDepth ?? 0
@@ -108,12 +107,12 @@ const TaskNode = ({ data }: NodeProps<{ label: string; kind: string; state?: Run
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         style={{ opacity: 0, width: 1, height: 1, border: 'none' }}
       />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         style={{ opacity: 0, width: 1, height: 1, border: 'none' }}
       />
       <Stack gap={2}>
@@ -153,13 +152,6 @@ const TaskNode = ({ data }: NodeProps<{ label: string; kind: string; state?: Run
   )
 }
 
-type QueueEdgeData = {
-  label: string
-  pending: number
-  blocked: number
-  maxDepth?: number
-}
-
 const QueueLabel = ({ data }: { data: QueueEdgeData }) => {
   return (
     <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} minW="160px">
@@ -194,7 +186,7 @@ const QueueEdge = ({
   targetPosition,
   markerEnd,
   data,
-}: EdgeProps<QueueEdgeData>) => {
+}: EdgeProps<QueueEdgeType>) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -229,20 +221,20 @@ const QueueEdge = ({
 
 const nodeTypes = {
   task: TaskNode,
-}
+} as const
 
 const edgeTypes = {
   queue: QueueEdge,
-}
+} as const
 
 const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
   const { initialNodes, initialEdges } = useMemo(() => {
     const { positions } = layoutFlowGraph(graph, {
       nodeWidth: TASK_WIDTH,
       nodeHeight: TASK_HEIGHT,
-      nodesep: 120,
-      ranksep: 180,
-      rankdir: 'TB',
+      nodesep: 60,
+      ranksep: 200,
+      rankdir: 'LR',
     })
 
     const nodes: Node[] = []
@@ -257,8 +249,8 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
         type: 'task',
         position: pos,
         data: { label: node.label, kind: node.kind, state: taskState.get(node.taskId) },
-        sourcePosition: Position.Bottom,
-        targetPosition: Position.Top,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
         style: { width: TASK_WIDTH, height: TASK_HEIGHT },
       })
     })
@@ -333,7 +325,7 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
   }, [initialEdges, setEdges])
 
   return (
-    <Box w="full" h={{ base: '360px', lg: '420px' }} borderWidth="1px" borderColor="gray.200" rounded="lg">
+    <Box w="full" h="340px" borderWidth="1px" borderColor="gray.200" rounded="lg">
       <ReactFlow
         nodes={nodes}
         edges={edges}

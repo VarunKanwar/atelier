@@ -4,7 +4,6 @@ export type ScenarioMeta = {
   id: string
   title: string
   summary: string
-  goal: string
 }
 
 export type ScenarioComponentProps = Record<string, never>

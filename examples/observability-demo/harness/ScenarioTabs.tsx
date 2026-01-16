@@ -1,6 +1,6 @@
-import { Box, HStack, Stack, Tabs, Text } from '@chakra-ui/react'
-import { createContext, useContext } from 'react'
+import { Tabs, Text } from '@chakra-ui/react'
 import type { ReactNode } from 'react'
+import { createContext, useContext } from 'react'
 
 import type { ScenarioDefinition } from '../scenarios/types'
 
@@ -42,31 +42,15 @@ const ScenarioTabs = () => {
   const { scenarios, activeId, setActiveId } = useScenarioNav()
 
   return (
-    <Box>
-      <Stack gap={2} mb={4}>
-        <Text fontWeight="semibold">Scenarios</Text>
-        <Text fontSize="xs" color="gray.500">
-          Switch demos while keeping the same layout.
-        </Text>
-      </Stack>
-      <Tabs.Root
-        orientation="vertical"
-        value={activeId}
-        onValueChange={event => setActiveId(event.value)}
-        variant="plain"
-        size="sm"
-      >
-        <Tabs.List display="flex" flexDirection="column" gap={1}>
-          {scenarios.map(scenario => (
-            <Tabs.Trigger key={scenario.meta.id} value={scenario.meta.id} justifyContent="flex-start">
-              <HStack justify="space-between" w="full">
-                <Text>{scenario.meta.title}</Text>
-              </HStack>
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-      </Tabs.Root>
-    </Box>
+    <Tabs.Root value={activeId} onValueChange={event => setActiveId(event.value)} size="sm">
+      <Tabs.List>
+        {scenarios.map(scenario => (
+          <Tabs.Trigger key={scenario.meta.id} value={scenario.meta.id}>
+            <Text>{scenario.meta.title}</Text>
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+    </Tabs.Root>
   )
 }
 

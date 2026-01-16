@@ -11,8 +11,8 @@ import {
 } from '@chakra-ui/react'
 import { useMemo } from 'react'
 import type { RuntimeTaskSnapshot, TaskRuntime } from '../../src'
-import ScenarioFlowCanvas from './harness/ScenarioFlowCanvas'
 import type { FlowGraph } from './harness/flow-types'
+import ScenarioFlowCanvas from './harness/ScenarioFlowCanvas'
 import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 
 export type RuntimeSnapshotPanelProps = {

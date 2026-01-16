@@ -21,7 +21,10 @@ const defaultConfig: LayoutConfig = {
   rankdir: 'LR',
 }
 
-export const layoutFlowGraph = (graph: FlowGraph, config: Partial<LayoutConfig> = {}): LayoutResult => {
+export const layoutFlowGraph = (
+  graph: FlowGraph,
+  config: Partial<LayoutConfig> = {}
+): LayoutResult => {
   const resolved = { ...defaultConfig, ...config }
 
   const g = new dagre.graphlib.Graph()

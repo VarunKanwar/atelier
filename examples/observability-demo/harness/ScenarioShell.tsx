@@ -1,53 +1,39 @@
-import { Box, Container, Heading, SimpleGrid, Stack, Text } from '@chakra-ui/react'
+import { Box, SimpleGrid, Stack } from '@chakra-ui/react'
 
 import type { ReactNode } from 'react'
+import ScenarioTabs from './ScenarioTabs'
 
 export type ScenarioShellProps = {
-  title: string
-  summary: string
-  goal: string
   controls: ReactNode
-  rightPanel: ReactNode
-  results: ReactNode
-  notes?: ReactNode
+  main: ReactNode
+  status?: ReactNode
 }
 
-const ScenarioShell = ({
-  title,
-  summary,
-  goal,
-  controls,
-  rightPanel,
-  results,
-  notes,
-}: ScenarioShellProps) => {
+const ScenarioShell = ({ controls, main, status }: ScenarioShellProps) => {
   return (
-    <Box minH="100vh" bg="gray.50">
-      <Container py={10} maxW="7xl">
-        <Stack gap={6}>
-          <Stack gap={3}>
-            <Stack gap={1}>
-              <Heading size="lg">{title}</Heading>
-              <Text color="gray.600">{summary}</Text>
-              <Text fontSize="sm" color="gray.500">
-                Goal: {goal}
-              </Text>
+    <Box minH="100vh" bg="gray.50" px={{ base: 4, lg: 6 }} py={5}>
+      <Box maxW="1600px" mx="auto">
+        <Stack gap={5}>
+          <ScenarioTabs />
+
+          <SimpleGrid columns={{ base: 1, lg: 12 }} gap={5} alignItems="start">
+            <Box
+              gridColumn={{ base: 'span 1', lg: 'span 3' }}
+              bg="white"
+              borderWidth="1px"
+              borderColor="gray.200"
+              rounded="lg"
+              overflow="hidden"
+            >
+              {controls}
+            </Box>
+            <Stack gridColumn={{ base: 'span 1', lg: 'span 9' }} gap={3}>
+              {main}
+              {status}
             </Stack>
-          </Stack>
-
-          <SimpleGrid columns={{ base: 1, lg: 12 }} gap={6} alignItems="start">
-            <Box gridColumn={{ base: 'span 1', lg: 'span 4' }}>{controls}</Box>
-            <Box gridColumn={{ base: 'span 1', lg: 'span 8' }}>{rightPanel}</Box>
-          </SimpleGrid>
-
-          <SimpleGrid columns={{ base: 1, lg: 12 }} gap={6} alignItems="start">
-            <Box gridColumn={{ base: 'span 1', lg: 'span 8' }}>{results}</Box>
-            {notes ? (
-              <Box gridColumn={{ base: 'span 1', lg: 'span 4' }}>{notes}</Box>
-            ) : null}
           </SimpleGrid>
         </Stack>
-      </Container>
+      </Box>
     </Box>
   )
 }
