@@ -194,9 +194,9 @@ bun run build
 
 See the `examples/` directory for runnable demos:
 
-- `examples/observability-demo/` - Live view of worker pools, queues, and metrics
+- `examples/observability-demo/` - Guided tour of workers, queues, and backpressure
 
-To run the observability demo:
+To run the guided tour:
 
 ```bash
 bun run examples
