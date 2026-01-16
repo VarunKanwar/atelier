@@ -10,13 +10,19 @@ import {
   Handle,
   Background,
   Controls,
+  EdgeLabelRenderer,
+  BaseEdge,
   MarkerType,
   Position,
+  getBezierPath,
+  useEdgesState,
+  useNodesState,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
 } from '@xyflow/react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import type { RuntimeSnapshot } from '../../../src'
 import type { FlowGraph } from './flow-types'
@@ -29,8 +35,6 @@ export type ScenarioFlowCanvasProps = {
 
 const TASK_WIDTH = 280
 const TASK_HEIGHT = 190
-const QUEUE_WIDTH = 200
-const QUEUE_HEIGHT = 150
 
 const QueueMeter = ({ label, value, max }: { label: string; value: number; max?: number }) => {
   if (!max || !Number.isFinite(max)) {
@@ -149,27 +153,16 @@ const TaskNode = ({ data }: NodeProps<{ label: string; kind: string; state?: Run
   )
 }
 
-const QueueNode = ({ data }: NodeProps<{ label: string; pending: number; blocked: number; maxDepth?: number }>) => {
+type QueueEdgeData = {
+  label: string
+  pending: number
+  blocked: number
+  maxDepth?: number
+}
+
+const QueueLabel = ({ data }: { data: QueueEdgeData }) => {
   return (
-    <Box
-      bg="gray.50"
-      borderWidth="1px"
-      borderColor="gray.200"
-      rounded="lg"
-      p={3}
-      minW="160px"
-      position="relative"
-    >
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ opacity: 0, width: 1, height: 1, border: 'none' }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ opacity: 0, width: 1, height: 1, border: 'none' }}
-      />
+    <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} minW="160px">
       <Stack gap={2}>
         <Text fontSize="xs" color="gray.500">
           {data.label}
@@ -192,13 +185,58 @@ const QueueNode = ({ data }: NodeProps<{ label: string; pending: number; blocked
   )
 }
 
+const QueueEdge = ({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  data,
+}: EdgeProps<QueueEdgeData>) => {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  })
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} />
+      {data ? (
+        <EdgeLabelRenderer>
+          <Box
+            style={{
+              position: 'absolute',
+              transform: 'translate(-50%, -50%)',
+              left: `${labelX}px`,
+              top: `${labelY}px`,
+              pointerEvents: 'all',
+            }}
+            className="nodrag nopan"
+          >
+            <QueueLabel data={data} />
+          </Box>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  )
+}
+
 const nodeTypes = {
   task: TaskNode,
-  queue: QueueNode,
+}
+
+const edgeTypes = {
+  queue: QueueEdge,
 }
 
 const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
-  const { nodes, edges } = useMemo(() => {
+  const { initialNodes, initialEdges } = useMemo(() => {
     const { positions } = layoutFlowGraph(graph, {
       nodeWidth: TASK_WIDTH,
       nodeHeight: TASK_HEIGHT,
@@ -226,58 +264,73 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
     })
 
     graph.edges.forEach(edge => {
-      const from = positions[edge.from]
-      const to = positions[edge.to]
-      if (!from || !to) return
-
-      const fromCenter = {
-        x: from.x + TASK_WIDTH / 2,
-        y: from.y + TASK_HEIGHT,
-      }
-      const toCenter = {
-        x: to.x + TASK_WIDTH / 2,
-        y: to.y,
-      }
-
-      const queueId = `queue-${edge.from}-${edge.to}`
-      const queueX = (fromCenter.x + toCenter.x) / 2 - QUEUE_WIDTH / 2
-      const queueY = (fromCenter.y + toCenter.y) / 2 - QUEUE_HEIGHT / 2
-
       const queueTask = taskState.get(edge.to)
-
-      nodes.push({
-        id: queueId,
+      edges.push({
+        id: `queue-${edge.from}-${edge.to}`,
+        source: edge.from,
+        target: edge.to,
         type: 'queue',
-        position: { x: queueX, y: queueY },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#CBD5E0' },
         data: {
           label: edge.label ?? 'queue',
           pending: queueTask?.pendingQueueDepth ?? 0,
           blocked: queueTask?.blockedQueueDepth ?? 0,
           maxDepth: queueTask?.maxQueueDepth,
-        },
-        sourcePosition: Position.Bottom,
-        targetPosition: Position.Top,
-        style: { width: QUEUE_WIDTH, height: QUEUE_HEIGHT },
-      })
-
-      edges.push({
-        id: `${edge.from}-${queueId}`,
-        source: edge.from,
-        target: queueId,
-        type: 'smoothstep',
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#CBD5E0' },
-      })
-      edges.push({
-        id: `${queueId}-${edge.to}`,
-        source: queueId,
-        target: edge.to,
-        type: 'smoothstep',
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#CBD5E0' },
+        } satisfies QueueEdgeData,
       })
     })
 
-    return { nodes, edges }
+    return { initialNodes: nodes, initialEdges: edges }
   }, [graph, snapshot])
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+
+  useEffect(() => {
+    setNodes(existing => {
+      const nextById = new Map(initialNodes.map(node => [node.id, node]))
+      const updated = existing
+        .filter(node => nextById.has(node.id))
+        .map(node => {
+          const next = nextById.get(node.id)
+          if (!next) return node
+          return {
+            ...node,
+            data: next.data,
+            type: next.type,
+          }
+        })
+      for (const node of initialNodes) {
+        if (!updated.find(item => item.id === node.id)) {
+          updated.push(node)
+        }
+      }
+      return updated
+    })
+  }, [initialNodes, setNodes])
+
+  useEffect(() => {
+    setEdges(existing => {
+      const nextById = new Map(initialEdges.map(edge => [edge.id, edge]))
+      const updated = existing
+        .filter(edge => nextById.has(edge.id))
+        .map(edge => {
+          const next = nextById.get(edge.id)
+          if (!next) return edge
+          return {
+            ...edge,
+            data: next.data,
+            type: next.type,
+          }
+        })
+      for (const edge of initialEdges) {
+        if (!updated.find(item => item.id === edge.id)) {
+          updated.push(edge)
+        }
+      }
+      return updated
+    })
+  }, [initialEdges, setEdges])
 
   return (
     <Box w="full" h={{ base: '360px', lg: '420px' }} borderWidth="1px" borderColor="gray.200" rounded="lg">
@@ -285,8 +338,11 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         fitView
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         elementsSelectable={false}
         zoomOnScroll

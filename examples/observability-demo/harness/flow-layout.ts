@@ -18,7 +18,7 @@ const defaultConfig: LayoutConfig = {
   nodeHeight: 160,
   nodesep: 80,
   ranksep: 120,
-  rankdir: 'TB',
+  rankdir: 'LR',
 }
 
 export const layoutFlowGraph = (graph: FlowGraph, config: Partial<LayoutConfig> = {}): LayoutResult => {
