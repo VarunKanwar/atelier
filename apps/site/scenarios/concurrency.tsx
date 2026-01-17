@@ -1,7 +1,6 @@
 import { Box, Button, HStack, Input, Stack, Text } from '@chakra-ui/react'
+import { createTaskRuntime } from '@varunkanwar/atelier'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import { createTaskRuntime } from '../../../src'
 import type { FlowGraph } from '../harness/flow-types'
 import ScenarioShell from '../harness/ScenarioShell'
 import RuntimeSnapshotPanel from '../RuntimeSnapshotPanel'
@@ -13,7 +12,7 @@ import {
   runImagePipeline,
 } from '../workflows/image-pipeline'
 import type { ScenarioComponentProps, ScenarioDefinition } from './types'
-import { clampNumber, isAbortError } from './utils'
+import { clampNumber } from './utils'
 
 type RunStatus = 'idle' | 'running' | 'done'
 
@@ -34,22 +33,22 @@ const graph: FlowGraph = {
   order: ['source', 'resize', 'analyze', 'enhance', 'sink'],
 }
 
-const CancellationScenario = (_props: ScenarioComponentProps) => {
+const Divider = () => <Box borderTopWidth="1px" borderColor="gray.200" />
+
+const ConcurrencyScenario = (_props: ScenarioComponentProps) => {
   const runtime = useMemo(() => createTaskRuntime({ observability: { spans: 'off' } }), [])
   const tasksRef = useRef<PipelineTasks | null>(null)
-  const [batchSize, setBatchSize] = useState(28)
-  const [concurrencyLimit, setConcurrencyLimit] = useState(6)
+  const [batchSize, setBatchSize] = useState(30)
+  const [concurrencyLimit, setConcurrencyLimit] = useState(4)
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [completed, setCompleted] = useState(0)
   const [failed, setFailed] = useState(0)
-  const [canceled, setCanceled] = useState(0)
-  const [runKey, setRunKey] = useState<string | null>(null)
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [finishedAt, setFinishedAt] = useState<number | null>(null)
   const runIdRef = useRef(0)
 
   if (!tasksRef.current) {
-    tasksRef.current = createImagePipelineTasks(runtime, {
-      analyze: { maxQueueDepth: 10, queuePolicy: 'block' },
-    })
+    tasksRef.current = createImagePipelineTasks(runtime, {})
   }
 
   useEffect(() => {
@@ -64,17 +63,14 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
     if (!tasks) return
 
     const runId = ++runIdRef.current
-    const resolvedBatch = clampNumber(batchSize, 28, 1, 200)
-    const resolvedLimit = clampNumber(concurrencyLimit, 6, 1, 64)
-    const nextKey = `cancel-run-${runId}`
+    const resolvedBatch = clampNumber(batchSize, 30, 1, 200)
+    const resolvedLimit = clampNumber(concurrencyLimit, 4, 1, 64)
 
-    runtime.abortTaskController.clear(nextKey)
-    const signal = runtime.abortTaskController.signalFor(nextKey)
-    setRunKey(nextKey)
     setRunStatus('running')
     setCompleted(0)
     setFailed(0)
-    setCanceled(0)
+    setStartedAt(Date.now())
+    setFinishedAt(null)
 
     const images = generateImages(resolvedBatch)
 
@@ -83,33 +79,33 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
         tasks,
         images,
         concurrencyLimit: resolvedLimit,
-        dispatchOptions: { key: nextKey, signal },
       })) {
         if (runIdRef.current !== runId) break
         if (result.status === 'fulfilled') {
           setCompleted(prev => prev + 1)
         } else {
-          const isCanceled = isAbortError(result.error)
-          if (isCanceled) {
-            setCanceled(prev => prev + 1)
-          } else {
-            setFailed(prev => prev + 1)
-          }
+          setFailed(prev => prev + 1)
         }
       }
     } finally {
       if (runIdRef.current === runId) {
         setRunStatus('done')
+        setFinishedAt(Date.now())
       }
     }
-  }, [batchSize, concurrencyLimit, runtime, runStatus])
+  }, [batchSize, concurrencyLimit, runStatus])
 
-  const handleAbort = useCallback(() => {
-    if (!runKey) return
-    runtime.abortTaskController.abort(runKey)
-  }, [runKey, runtime])
+  const durationMs = useMemo(() => {
+    if (!startedAt) return 0
+    const end = finishedAt ?? Date.now()
+    return Math.max(0, end - startedAt)
+  }, [finishedAt, startedAt])
 
-  const Divider = () => <Box borderTopWidth="1px" borderColor="gray.200" />
+  const throughput = useMemo(() => {
+    if (!finishedAt || durationMs === 0) return null
+    const seconds = durationMs / 1000
+    return seconds > 0 ? completed / seconds : null
+  }, [completed, durationMs, finishedAt])
 
   const controls = (
     <Stack gap={0}>
@@ -130,7 +126,7 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
           </Box>
           <Box>
             <Text fontSize="xs" color="gray.500" mb={1}>
-              Pipeline concurrency
+              Concurrency limit
             </Text>
             <Input
               size="sm"
@@ -147,27 +143,15 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
       <Divider />
 
       <Box p={4}>
-        <HStack gap={2} mb={3}>
-          <Button
-            size="sm"
-            onClick={handleRun}
-            disabled={runStatus === 'running'}
-            colorScheme="blue"
-          >
-            {runStatus === 'running' ? 'Running…' : 'Run'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleAbort}
-            disabled={!runKey || runStatus !== 'running'}
-          >
-            Abort
-          </Button>
-        </HStack>
-        <Text fontSize="xs" color="gray.500">
-          Key: {runKey ?? '—'}
-        </Text>
+        <Button
+          size="sm"
+          onClick={handleRun}
+          disabled={runStatus === 'running'}
+          colorScheme="blue"
+          w="full"
+        >
+          {runStatus === 'running' ? 'Running…' : 'Run'}
+        </Button>
       </Box>
     </Stack>
   )
@@ -181,17 +165,25 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
         </Text>
       </HStack>
       <HStack gap={2}>
-        <Text>Canceled</Text>
-        <Text fontWeight="semibold" color="orange.600">
-          {canceled}
-        </Text>
-      </HStack>
-      <HStack gap={2}>
         <Text>Failed</Text>
         <Text fontWeight="semibold" color="gray.800">
           {failed}
         </Text>
       </HStack>
+      <HStack gap={2}>
+        <Text>Duration</Text>
+        <Text fontWeight="semibold" color="gray.800">
+          {(durationMs / 1000).toFixed(1)}s
+        </Text>
+      </HStack>
+      {throughput !== null && (
+        <HStack gap={2}>
+          <Text>Throughput</Text>
+          <Text fontWeight="semibold" color="gray.800">
+            {throughput.toFixed(1)} img/s
+          </Text>
+        </HStack>
+      )}
     </HStack>
   )
 
@@ -204,11 +196,11 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
   )
 }
 
-export const cancellationScenario: ScenarioDefinition = {
+export const concurrencyScenario: ScenarioDefinition = {
   meta: {
-    id: 'cancellation',
-    title: 'Cancellation',
-    summary: 'Abort a workload and see queued vs in-flight cancellation.',
+    id: 'concurrency',
+    title: 'Pipeline concurrency',
+    summary: 'Control throughput with parallelLimit.',
   },
-  Component: CancellationScenario,
+  Component: ConcurrencyScenario,
 }

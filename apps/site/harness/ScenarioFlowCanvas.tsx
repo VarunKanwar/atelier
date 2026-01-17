@@ -1,4 +1,5 @@
 import { Box, HStack, Progress, Stack, Text } from '@chakra-ui/react'
+import type { RuntimeSnapshot, RuntimeTaskSnapshot } from '@varunkanwar/atelier'
 import type { EdgeProps, NodeProps } from '@xyflow/react'
 import {
   Background,
@@ -16,8 +17,6 @@ import {
   useNodesState,
 } from '@xyflow/react'
 import { useEffect, useMemo } from 'react'
-
-import type { RuntimeSnapshot, RuntimeTaskSnapshot } from '../../../src'
 import { layoutFlowGraph } from './flow-layout'
 import type { FlowGraph } from './flow-types'
 

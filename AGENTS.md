@@ -15,30 +15,30 @@ Atelier is a browser-only task runtime for Web Worker orchestration. It provides
 
 ## Key Files
 
-- Runtime: `src/runtime.ts`
-- Task definition/proxy: `src/define-task.ts`
-- Executors: `src/worker-pool.ts`, `src/singleton-worker.ts`
-- Queue: `src/dispatch-queue.ts`
-- Worker harness: `src/task-worker.ts`
-- Types: `src/types.ts`
-- Tests: `tests/`
+- Runtime: `packages/atelier/src/runtime.ts`
+- Task definition/proxy: `packages/atelier/src/define-task.ts`
+- Executors: `packages/atelier/src/worker-pool.ts`, `packages/atelier/src/singleton-worker.ts`
+- Queue: `packages/atelier/src/dispatch-queue.ts`
+- Worker harness: `packages/atelier/src/task-worker.ts`
+- Types: `packages/atelier/src/types.ts`
+- Tests: `packages/atelier/tests/`
 - Docs: `docs/`
 
 ## Code Style & Tooling
 
 - TypeScript, ESM (`"type": "module"` in `package.json`).
 - Formatting/lint: Biome (`bun run check` / `bun run check:fix`).
-- Tests: Vitest (`bun run test` or `npm run test`).
-- Build: `bun run build` (tsc build config in `tsconfig.build.json`).
+- Tests: Vitest (`bun run test`).
+- Build: `bun run build` (tsc build config in `packages/atelier/tsconfig.build.json`).
 
 Prefer small, well-scoped changes and keep types precise.
 
 ## Testing Expectations
 
 - For behavior changes in executors/queue/cancellation, add or update tests.
-- Integration tests live under `tests/integration`.
-- Unit tests live under `tests/unit`.
-- Worker crash/cancellation tests use `tests/helpers/fake-worker.ts`.
+- Integration tests live under `packages/atelier/tests/integration`.
+- Unit tests live under `packages/atelier/tests/unit`.
+- Worker crash/cancellation tests use `packages/atelier/tests/helpers/fake-worker.ts`.
 
 ## Architectural Notes
 

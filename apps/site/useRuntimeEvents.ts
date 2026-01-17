@@ -1,6 +1,5 @@
+import type { RuntimeEvent, SpanEvent, TaskRuntime, TraceEvent } from '@varunkanwar/atelier'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import type { RuntimeEvent, SpanEvent, TaskRuntime, TraceEvent } from '../../src'
 
 export type RuntimeEventStats = {
   counters: Record<string, number>
