@@ -42,7 +42,7 @@ const graph: FlowGraph = {
 }
 
 const queuePolicies: { label: string; value: QueuePolicy }[] = [
-  { label: 'Block (default)', value: 'block' },
+  { label: 'Block (call-site wait)', value: 'block' },
   { label: 'Reject', value: 'reject' },
   { label: 'Drop latest', value: 'drop-latest' },
   { label: 'Drop oldest', value: 'drop-oldest' },

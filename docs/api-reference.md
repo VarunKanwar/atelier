@@ -52,6 +52,9 @@ Notes:
 - `keyOf` derives the cancellation key per call. Returning an empty string
   is treated as “no key”.
 - `timeoutMs` is applied per dispatch and aborts the call.
+- `maxInFlight` defaults to `poolSize` (parallel) or `1` (singleton).
+- `maxQueueDepth` defaults to `maxInFlight * 2` (parallel) or `2` (singleton).
+- `queuePolicy: 'block'` waits at the call site until queue capacity exists.
 - `crashPolicy` controls recovery after worker crashes. Default is
   `restart-fail-in-flight`.
 - `crashMaxRetries` caps consecutive crashes before escalating to `fail-task`

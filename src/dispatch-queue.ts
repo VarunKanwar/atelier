@@ -8,7 +8,7 @@
  * Design:
  * - FIFO queue in the executor with maxInFlight + maxQueueDepth limits.
  * - Queue policy controls behavior when full:
- *   - block: wait for capacity (default)
+ *   - block: wait at call site for capacity (default)
  *   - reject: reject immediately
  *   - drop-latest: reject newest
  *   - drop-oldest: evict oldest pending entry
@@ -26,7 +26,7 @@ import type { QueuePolicy, TaskDispatchOptions } from './types'
 export type DispatchQueueState = {
   inFlight: number
   pending: number
-  blocked: number
+  waiting: number
   maxInFlight: number
   maxQueueDepth: number
   queuePolicy: QueuePolicy
@@ -35,11 +35,10 @@ export type DispatchQueueState = {
 }
 
 export type DispatchQueueHooks<T> = {
-  onBlocked?: (payload: T, blockedDepth: number, maxQueueDepth: number) => void
   onQueued?: (payload: T, pendingDepth: number, maxQueueDepth: number) => void
   onDispatch?: (payload: T, queueWaitMs: number) => void
   onReject?: (payload: T, error: Error) => void
-  onCancel?: (payload: T, phase: 'queued' | 'blocked' | 'in-flight') => void
+  onCancel?: (payload: T, phase: 'waiting' | 'queued' | 'in-flight') => void
   onStateChange?: (state: DispatchQueueState) => void
   onIdle?: () => void
   onActive?: () => void
@@ -54,18 +53,27 @@ type QueueEntry<T> = {
   queuedAbortHandler?: () => void
   inFlightAbortHandler?: () => void
   attempt: number
-  state: 'pending' | 'blocked' | 'in-flight'
+  state: 'waiting' | 'pending' | 'in-flight'
+}
+
+type CapacityWaiter<T> = {
+  entry: QueueEntry<T>
+  resolve: () => void
+  reject: (error: Error) => void
+  abortHandler?: () => void
+  active: boolean
 }
 
 export class DispatchQueue<T> {
   private readonly pending: QueueEntry<T>[] = []
-  private readonly blocked: QueueEntry<T>[] = []
+  private readonly capacityWaiters: CapacityWaiter<T>[] = []
   private readonly inFlight = new Set<QueueEntry<T>>()
   private readonly maxInFlight: number
   private readonly maxQueueDepth: number
   private readonly run: (payload: T, queueWaitMs: number) => Promise<unknown>
   private readonly hooks: DispatchQueueHooks<T>
   private readonly queuePolicy: QueuePolicy
+  private pendingPermits: number
   private paused = false
   private disposed = false
   private wasIdle = true
@@ -80,6 +88,7 @@ export class DispatchQueue<T> {
     this.maxQueueDepth = options.maxQueueDepth
     this.queuePolicy = options.queuePolicy
     this.hooks = hooks
+    this.pendingPermits = this.usesPendingPermits() ? this.maxQueueDepth : 0
   }
 
   enqueue(payload: T, options?: TaskDispatchOptions): Promise<unknown> {
@@ -89,10 +98,11 @@ export class DispatchQueue<T> {
       this.hooks.onReject?.(payload, error)
       return Promise.reject(error)
     }
+
     const signal = options?.signal
     if (signal?.aborted) {
       const error = createAbortError()
-      this.hooks.onCancel?.(payload, 'queued')
+      this.hooks.onCancel?.(payload, 'waiting')
       return Promise.reject(error)
     }
 
@@ -104,48 +114,34 @@ export class DispatchQueue<T> {
         reject,
         signal,
         attempt: 0,
-        state: 'pending',
+        state: 'waiting',
       }
 
-      const enqueueOrBlock = () => {
-        if (this.pending.length >= this.maxQueueDepth) {
-          if (this.queuePolicy === 'block') {
-            this.blocked.push(entry)
-            entry.state = 'blocked'
-            this.hooks.onBlocked?.(payload, this.blocked.length, this.maxQueueDepth)
-            this.notifyStateChange()
-            return
-          }
-          if (this.queuePolicy === 'drop-oldest') {
-            const dropped = this.pending.shift()
-            if (dropped) {
-              const dropError = createDropError('drop-oldest')
-              if (dropped.queuedAbortHandler && dropped.signal) {
-                dropped.signal.removeEventListener('abort', dropped.queuedAbortHandler)
-                dropped.queuedAbortHandler = undefined
-              }
-              dropped.reject(dropError)
-              this.hooks.onReject?.(dropped.payload, dropError)
-            }
-          } else {
-            const error = createDropError(
-              this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject'
-            )
-            this.hooks.onReject?.(payload, error)
-            reject(error)
-            return
-          }
+      const startEnqueue = async () => {
+        if (this.rejectIfDisposed(payload, reject)) return
+        if (this.rejectIfAborted(payload, signal, reject)) return
+
+        const permitResult = this.acquirePermitIfNeeded(entry, reject)
+        const permitAcquired =
+          typeof (permitResult as Promise<boolean | null>)?.then === 'function'
+            ? await permitResult
+            : permitResult
+        if (permitAcquired === null) return
+
+        if (this.rejectIfDisposed(payload, reject)) {
+          if (permitAcquired) this.releasePendingPermit()
+          return
         }
+        if (this.rejectIfAborted(payload, signal, reject)) {
+          if (permitAcquired) this.releasePendingPermit()
+          return
+        }
+        if (this.applyOverflowPolicy(payload, reject)) return
 
-        this.pending.push(entry)
-        entry.state = 'pending'
-        this.hooks.onQueued?.(payload, this.pending.length, this.maxQueueDepth)
-        this.pump()
+        this.enqueueEntry(entry)
       }
 
-      enqueueOrBlock()
-
-      this.attachQueuedAbortHandler(entry)
+      void startEnqueue()
     })
   }
 
@@ -153,7 +149,7 @@ export class DispatchQueue<T> {
     return {
       inFlight: this.inFlight.size,
       pending: this.pending.length,
-      blocked: this.blocked.length,
+      waiting: this.capacityWaiters.length,
       maxInFlight: this.maxInFlight,
       maxQueueDepth: this.maxQueueDepth,
       queuePolicy: this.queuePolicy,
@@ -191,13 +187,16 @@ export class DispatchQueue<T> {
       }
       entry.reject(error)
     }
-    for (const entry of this.blocked.splice(0, this.blocked.length)) {
-      entry.state = 'blocked'
-      if (entry.queuedAbortHandler && entry.signal) {
-        entry.signal.removeEventListener('abort', entry.queuedAbortHandler)
-        entry.queuedAbortHandler = undefined
+    if (this.usesPendingPermits()) {
+      this.pendingPermits = this.maxQueueDepth
+    }
+    for (const waiter of this.capacityWaiters.splice(0, this.capacityWaiters.length)) {
+      waiter.active = false
+      if (waiter.abortHandler && waiter.entry.signal) {
+        waiter.entry.signal.removeEventListener('abort', waiter.abortHandler)
+        waiter.abortHandler = undefined
       }
-      entry.reject(error)
+      waiter.reject(error)
     }
     for (const entry of Array.from(this.inFlight)) {
       this.inFlight.delete(entry)
@@ -210,7 +209,6 @@ export class DispatchQueue<T> {
     this.notifyStateChange()
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Queue reordering with multiple edge cases (crash recovery, cancellation)
   requeueInFlight(predicate: (payload: T) => boolean = () => true): T[] {
     // Move matching in-flight entries back to the queue (used when workers stop or crash).
     if (this.inFlight.size === 0) return []
@@ -239,40 +237,11 @@ export class DispatchQueue<T> {
       entry.enqueuedAt = getNow()
       requeued.push(entry.payload)
 
-      if (this.pending.length >= this.maxQueueDepth) {
-        if (this.queuePolicy === 'block') {
-          entry.state = 'blocked'
-          this.blocked.push(entry)
-          this.hooks.onBlocked?.(entry.payload, this.blocked.length, this.maxQueueDepth)
-          this.attachQueuedAbortHandler(entry)
-        } else if (this.queuePolicy === 'drop-oldest') {
-          const dropped = this.pending.shift()
-          if (dropped) {
-            const dropError = createDropError('drop-oldest')
-            if (dropped.queuedAbortHandler && dropped.signal) {
-              dropped.signal.removeEventListener('abort', dropped.queuedAbortHandler)
-              dropped.queuedAbortHandler = undefined
-            }
-            dropped.reject(dropError)
-            this.hooks.onReject?.(dropped.payload, dropError)
-          }
-          entry.state = 'pending'
-          this.pending.unshift(entry)
-          this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
-          this.attachQueuedAbortHandler(entry)
-        } else {
-          const error = createDropError(
-            this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject'
-          )
-          this.hooks.onReject?.(entry.payload, error)
-          entry.reject(error)
-        }
-      } else {
-        entry.state = 'pending'
-        this.pending.unshift(entry)
-        this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
-        this.attachQueuedAbortHandler(entry)
-      }
+      entry.state = 'pending'
+      this.pending.unshift(entry)
+      this.consumePendingPermit()
+      this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
+      this.attachQueuedAbortHandler(entry)
     }
     this.pump()
     return requeued
@@ -297,9 +266,9 @@ export class DispatchQueue<T> {
     return rejected
   }
 
-  rejectAll(error: Error): { pending: T[]; blocked: T[]; inFlight: T[] } {
+  rejectAll(error: Error): { pending: T[]; waiting: T[]; inFlight: T[] } {
     const pendingPayloads: T[] = []
-    const blockedPayloads: T[] = []
+    const waitingPayloads: T[] = []
     const inFlightPayloads: T[] = []
     for (const entry of this.pending.splice(0, this.pending.length)) {
       if (entry.queuedAbortHandler && entry.signal) {
@@ -309,13 +278,17 @@ export class DispatchQueue<T> {
       entry.reject(error)
       pendingPayloads.push(entry.payload)
     }
-    for (const entry of this.blocked.splice(0, this.blocked.length)) {
-      if (entry.queuedAbortHandler && entry.signal) {
-        entry.signal.removeEventListener('abort', entry.queuedAbortHandler)
-        entry.queuedAbortHandler = undefined
+    if (this.usesPendingPermits()) {
+      this.pendingPermits = this.maxQueueDepth
+    }
+    for (const waiter of this.capacityWaiters.splice(0, this.capacityWaiters.length)) {
+      waiter.active = false
+      if (waiter.abortHandler && waiter.entry.signal) {
+        waiter.entry.signal.removeEventListener('abort', waiter.abortHandler)
+        waiter.abortHandler = undefined
       }
-      entry.reject(error)
-      blockedPayloads.push(entry.payload)
+      waiter.reject(error)
+      waitingPayloads.push(waiter.entry.payload)
     }
     for (const entry of Array.from(this.inFlight)) {
       this.inFlight.delete(entry)
@@ -327,11 +300,13 @@ export class DispatchQueue<T> {
       inFlightPayloads.push(entry.payload)
     }
     this.notifyStateChange()
-    return { pending: pendingPayloads, blocked: blockedPayloads, inFlight: inFlightPayloads }
+    return { pending: pendingPayloads, waiting: waitingPayloads, inFlight: inFlightPayloads }
   }
 
   isIdle(): boolean {
-    return this.inFlight.size === 0 && this.pending.length === 0 && this.blocked.length === 0
+    return (
+      this.inFlight.size === 0 && this.pending.length === 0 && this.capacityWaiters.length === 0
+    )
   }
 
   private pump(): void {
@@ -348,6 +323,7 @@ export class DispatchQueue<T> {
         entry.signal.removeEventListener('abort', entry.queuedAbortHandler)
         entry.queuedAbortHandler = undefined
       }
+      this.releasePendingPermit()
 
       const queueWaitMs = getNow() - entry.enqueuedAt
       entry.state = 'in-flight'
@@ -356,6 +332,8 @@ export class DispatchQueue<T> {
       const attempt = entry.attempt
       this.inFlight.add(entry)
       this.hooks.onDispatch?.(entry.payload, queueWaitMs)
+
+      this.notifyCapacityWaiters()
 
       let settled = false
       const finish = () => {
@@ -405,16 +383,6 @@ export class DispatchQueue<T> {
         })
     }
 
-    if (this.queuePolicy === 'block') {
-      while (this.pending.length < this.maxQueueDepth && this.blocked.length > 0) {
-        const entry = this.blocked.shift()
-        if (!entry) break
-        this.pending.push(entry)
-        entry.state = 'pending'
-        this.hooks.onBlocked?.(entry.payload, this.blocked.length, this.maxQueueDepth)
-        this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
-      }
-    }
     this.notifyStateChange()
   }
 
@@ -431,11 +399,161 @@ export class DispatchQueue<T> {
     }
   }
 
+  private rejectIfDisposed(payload: T, reject: (error: unknown) => void): boolean {
+    if (!this.disposed) return false
+    const error = createDisposedError()
+    this.hooks.onReject?.(payload, error)
+    reject(error)
+    return true
+  }
+
+  private rejectIfAborted(
+    payload: T,
+    signal: AbortSignal | undefined,
+    reject: (error: unknown) => void
+  ): boolean {
+    if (!signal?.aborted) return false
+    const error = createAbortError()
+    this.hooks.onCancel?.(payload, 'waiting')
+    reject(error)
+    return true
+  }
+
+  private acquirePermitIfNeeded(
+    entry: QueueEntry<T>,
+    reject: (error: unknown) => void
+  ): boolean | null | Promise<boolean | null> {
+    if (!this.usesPendingPermits()) return false
+
+    const waitForPermit = this.acquirePendingPermit(entry)
+    if (!waitForPermit) {
+      return true
+    }
+
+    return waitForPermit.then(
+      () => true,
+      error => {
+        reject(error)
+        return null
+      }
+    )
+  }
+
+  private applyOverflowPolicy(payload: T, reject: (error: unknown) => void): boolean {
+    if (this.queuePolicy === 'block' || this.pending.length < this.maxQueueDepth) {
+      return false
+    }
+
+    if (this.queuePolicy === 'drop-oldest') {
+      const dropped = this.pending.shift()
+      if (dropped) {
+        const dropError = createDropError('drop-oldest')
+        if (dropped.queuedAbortHandler && dropped.signal) {
+          dropped.signal.removeEventListener('abort', dropped.queuedAbortHandler)
+          dropped.queuedAbortHandler = undefined
+        }
+        dropped.reject(dropError)
+        this.hooks.onReject?.(dropped.payload, dropError)
+      }
+      return false
+    }
+
+    const error = createDropError(this.queuePolicy === 'drop-latest' ? 'drop-latest' : 'reject')
+    this.hooks.onReject?.(payload, error)
+    reject(error)
+    return true
+  }
+
+  private enqueueEntry(entry: QueueEntry<T>): void {
+    this.pending.push(entry)
+    entry.state = 'pending'
+    this.hooks.onQueued?.(entry.payload, this.pending.length, this.maxQueueDepth)
+    this.attachQueuedAbortHandler(entry)
+    this.pump()
+  }
+
+  private usesPendingPermits(): boolean {
+    return this.queuePolicy === 'block' && Number.isFinite(this.maxQueueDepth)
+  }
+
+  private consumePendingPermit(): void {
+    if (!this.usesPendingPermits()) return
+    this.pendingPermits -= 1
+  }
+
+  private releasePendingPermit(): void {
+    if (!this.usesPendingPermits()) return
+    this.pendingPermits += 1
+  }
+
+  private acquirePendingPermit(entry: QueueEntry<T>): Promise<void> | null {
+    if (this.disposed) {
+      return Promise.reject(createDisposedError())
+    }
+    if (!this.usesPendingPermits()) {
+      return null
+    }
+    if (this.pendingPermits > 0 && this.capacityWaiters.length === 0) {
+      this.pendingPermits -= 1
+      return null
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: CapacityWaiter<T> = { entry, resolve, reject, active: true }
+
+      const onAbort = () => {
+        if (!waiter.active) return
+        waiter.active = false
+        this.removeWaiter(waiter)
+        this.hooks.onCancel?.(entry.payload, 'waiting')
+        reject(createAbortError())
+        this.notifyStateChange()
+      }
+
+      if (entry.signal) {
+        waiter.abortHandler = onAbort
+        entry.signal.addEventListener('abort', onAbort, { once: true })
+      }
+
+      this.capacityWaiters.push(waiter)
+      this.notifyStateChange()
+    })
+  }
+
+  private removeWaiter(waiter: CapacityWaiter<T>): void {
+    const index = this.capacityWaiters.indexOf(waiter)
+    if (index !== -1) {
+      this.capacityWaiters.splice(index, 1)
+    }
+  }
+
+  private notifyCapacityWaiters(): void {
+    if (!this.usesPendingPermits()) return
+    let released = false
+
+    while (this.capacityWaiters.length > 0 && this.pendingPermits > 0) {
+      const waiter = this.capacityWaiters.shift()
+      if (!waiter) break
+      waiter.active = false
+      if (waiter.abortHandler && waiter.entry.signal) {
+        waiter.entry.signal.removeEventListener('abort', waiter.abortHandler)
+        waiter.abortHandler = undefined
+      }
+      this.pendingPermits -= 1
+      waiter.resolve()
+      released = true
+    }
+
+    if (released) {
+      this.notifyStateChange()
+    }
+  }
+
   private attachQueuedAbortHandler(entry: QueueEntry<T>): void {
-    // Cancel queued/blocked entries when their AbortSignal fires.
+    // Cancel queued entries when their AbortSignal fires.
     if (!entry.signal) return
     if (entry.queuedAbortHandler) return
-    if (!this.pending.includes(entry) && !this.blocked.includes(entry)) {
+    if (!this.pending.includes(entry)) {
       return
     }
     const payload = entry.payload
@@ -445,14 +563,8 @@ export class DispatchQueue<T> {
         this.pending.splice(pendingIndex, 1)
         this.hooks.onCancel?.(payload, 'queued')
         entry.reject(createAbortError())
-        this.notifyStateChange()
-        return
-      }
-      const blockedIndex = this.blocked.indexOf(entry)
-      if (blockedIndex !== -1) {
-        this.blocked.splice(blockedIndex, 1)
-        this.hooks.onCancel?.(payload, 'blocked')
-        entry.reject(createAbortError())
+        this.releasePendingPermit()
+        this.notifyCapacityWaiters()
         this.notifyStateChange()
       }
     }

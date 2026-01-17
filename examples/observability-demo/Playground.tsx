@@ -45,7 +45,7 @@ const graph: FlowGraph = {
 }
 
 const queuePolicies: { label: string; value: QueuePolicy }[] = [
-  { label: 'Block (wait for capacity)', value: 'block' },
+  { label: 'Block (wait at call site)', value: 'block' },
   { label: 'Reject (fail immediately)', value: 'reject' },
   { label: 'Drop oldest (evict queue head)', value: 'drop-oldest' },
   { label: 'Drop latest (evict new item)', value: 'drop-latest' },
@@ -200,16 +200,19 @@ const Playground = () => {
   const crashRequestedRef = useRef(false)
 
   // Apply tab defaults
-  const applyTabDefaults = useCallback((tab: TabId) => {
-    const defaults = getDefaults(tab)
-    setImageCount(defaults.imageCount)
-    setLimitConcurrency(defaults.limitConcurrency)
-    setMaxConcurrent(defaults.maxConcurrent)
-    setLimitQueueDepth(defaults.limitQueueDepth)
-    setMaxQueueDepth(defaults.maxQueueDepth)
-    setQueuePolicy(defaults.queuePolicy)
-    setCrashPolicy(defaults.crashPolicy)
-  }, [getDefaults])
+  const applyTabDefaults = useCallback(
+    (tab: TabId) => {
+      const defaults = getDefaults(tab)
+      setImageCount(defaults.imageCount)
+      setLimitConcurrency(defaults.limitConcurrency)
+      setMaxConcurrent(defaults.maxConcurrent)
+      setLimitQueueDepth(defaults.limitQueueDepth)
+      setMaxQueueDepth(defaults.maxQueueDepth)
+      setQueuePolicy(defaults.queuePolicy)
+      setCrashPolicy(defaults.crashPolicy)
+    },
+    [getDefaults]
+  )
 
   const queuePolicyCollection = useMemo(() => createListCollection({ items: queuePolicies }), [])
   const crashPolicyCollection = useMemo(() => createListCollection({ items: crashPolicies }), [])

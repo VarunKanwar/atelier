@@ -24,7 +24,7 @@ import type { FlowGraph } from './flow-types'
 type TaskNodeData = { label: string; kind: string; state?: RuntimeTaskSnapshot }
 type TaskNodeType = Node<TaskNodeData, 'task'>
 
-type QueueEdgeData = { label: string; pending: number; blocked: number; maxDepth?: number }
+type QueueEdgeData = { label: string; pending: number; waiting: number; maxDepth?: number }
 type QueueEdgeType = Edge<QueueEdgeData, 'queue'>
 
 export type ScenarioFlowCanvasProps = {
@@ -161,9 +161,9 @@ const QueueLabel = ({ data }: { data: QueueEdgeData }) => {
         </Text>
         <QueueMeter label="Pending" value={data.pending} max={data.maxDepth} />
         <HStack justify="space-between" fontSize="xs" color="gray.600">
-          <Text>Blocked</Text>
+          <Text>Waiting</Text>
           <Text fontWeight="semibold" color="gray.800">
-            {data.blocked}
+            {data.waiting}
           </Text>
         </HStack>
         <HStack justify="space-between" fontSize="xs" color="gray.600">
@@ -266,7 +266,7 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
         data: {
           label: edge.label ?? 'queue',
           pending: queueTask?.pendingQueueDepth ?? 0,
-          blocked: queueTask?.blockedQueueDepth ?? 0,
+          waiting: queueTask?.waitingQueueDepth ?? 0,
           maxDepth: queueTask?.maxQueueDepth,
         } satisfies QueueEdgeData,
       })

@@ -8,7 +8,7 @@ Cancellation uses a runtime-scoped `AbortTaskController`:
 
 ## Where cancellation is applied
 
-1. **Queue-level**: pending/blocked entries are removed when the signal aborts.
+1. **Queue-level**: waiting/pending entries are removed when the signal aborts.
 2. **Worker-level**: in-flight work is canceled via `__cancel(callId)`.
 3. **Pipeline-level**: `parallelLimit` skips scheduling canceled items and drops
    results for aborted keys by default.

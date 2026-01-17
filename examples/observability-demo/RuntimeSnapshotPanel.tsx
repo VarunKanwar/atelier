@@ -32,8 +32,8 @@ const getMax = (value?: number): number | undefined =>
   value !== undefined && Number.isFinite(value) ? value : undefined
 
 const getAlertTone = (task: RuntimeTaskSnapshot): 'danger' | 'warning' | 'ok' => {
-  const blocked = formatCount(task.blockedQueueDepth)
-  if (blocked > 0) return 'danger'
+  const waiting = formatCount(task.waitingQueueDepth)
+  if (waiting > 0) return 'danger'
   const pending = formatCount(task.pendingQueueDepth)
   const maxQueueDepth = getMax(task.maxQueueDepth)
   if (maxQueueDepth && pending / Math.max(1, maxQueueDepth) >= 0.8) return 'warning'
@@ -114,7 +114,7 @@ const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
 
   const inFlight = formatCount(task.queueDepth)
   const pending = formatCount(task.pendingQueueDepth)
-  const blocked = formatCount(task.blockedQueueDepth)
+  const waiting = formatCount(task.waitingQueueDepth)
   const maxInFlight = getMax(task.maxInFlight)
   const maxPending = getMax(task.maxQueueDepth)
 
@@ -145,7 +145,7 @@ const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
       <Stack gap={2} mt={3}>
         <QueueBar label="In flight" value={inFlight} max={maxInFlight} tone={tone} />
         <QueueBar label="Pending" value={pending} max={maxPending} tone={tone} />
-        <MetricRow label="Blocked" value={`${blocked}`} />
+        <MetricRow label="Waiting" value={`${waiting}`} />
       </Stack>
 
       {task.type === 'parallel' ? (
@@ -200,7 +200,7 @@ const RuntimeSnapshotPanel = ({
             <Table.ColumnHeader>Workers</Table.ColumnHeader>
             <Table.ColumnHeader textAlign="end">In flight</Table.ColumnHeader>
             <Table.ColumnHeader textAlign="end">Pending</Table.ColumnHeader>
-            <Table.ColumnHeader textAlign="end">Blocked</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="end">Waiting</Table.ColumnHeader>
             <Table.ColumnHeader>Policy</Table.ColumnHeader>
           </Table.Row>
         </Table.Header>
@@ -240,7 +240,7 @@ const RuntimeSnapshotPanel = ({
                 <Table.Cell textAlign="end">
                   {formatCount(task.pendingQueueDepth)}/{formatLimit(task.maxQueueDepth)}
                 </Table.Cell>
-                <Table.Cell textAlign="end">{formatCount(task.blockedQueueDepth)}</Table.Cell>
+                <Table.Cell textAlign="end">{formatCount(task.waitingQueueDepth)}</Table.Cell>
                 <Table.Cell>{task.queuePolicy ?? 'block'}</Table.Cell>
               </Table.Row>
             ))

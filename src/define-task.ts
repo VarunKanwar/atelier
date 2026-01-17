@@ -88,8 +88,9 @@ export function createDefineTask(context: DefineTaskContext) {
     // Executor-level backpressure defaults:
     // - parallel: allow poolSize in-flight
     // - singleton: serialize with 1 in-flight
-    const resolvedMaxQueueDepth = maxQueueDepth ?? Number.POSITIVE_INFINITY
     const resolvedMaxInFlight = maxInFlight ?? (type === 'parallel' ? poolSize : 1)
+    const resolvedMaxQueueDepth =
+      maxQueueDepth ?? (type === 'parallel' ? resolvedMaxInFlight * 2 : 2)
     const resolvedQueuePolicy = queuePolicy ?? 'block'
 
     // Create executor based on task type
