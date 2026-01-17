@@ -82,6 +82,15 @@ and is treated like cancellation. Cancellation can happen while waiting,
 queued, or in-flight; the worker harness exposes `__cancel` so handlers can
 cooperate.
 
+```ts
+const runtime = createTaskRuntime()
+const resize = runtime.defineTask<ResizeAPI>({ /* ... */, keyOf: image => image.docId })
+
+const promise = resize.process(image) // image.docId === 'doc-123'
+runtime.abortTaskController.abort('doc-123')
+await promise
+```
+
 ## Zero-copy transfers
 
 Atelier automatically transfers common large data types (ArrayBuffer, ImageData,
@@ -122,7 +131,7 @@ const unsubscribe = runtime.subscribeEvents(event => {
 
 - Design notes: https://github.com/VarunKanwar/atelier/blob/main/docs/design/README.md
 - Observability model: https://github.com/VarunKanwar/atelier/blob/main/docs/design/observability.md
-- API reference: https://github.com/VarunKanwar/atelier/blob/main/docs/api-reference.md
+- API reference (generated via TypeDoc and published with the site)
 - Testing: https://github.com/VarunKanwar/atelier/blob/main/docs/testing.md
 - Demo site (scenarios and UI): https://github.com/VarunKanwar/atelier/tree/main/apps/site
 

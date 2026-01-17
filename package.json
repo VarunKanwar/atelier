@@ -17,7 +17,11 @@
     "test": "bun run --workspaces --if-present --silent test",
     "build": "bun run --workspaces --if-present --silent build",
     "site:dev": "bun run --cwd apps/site dev",
-    "site:build": "bun run --cwd apps/site build",
+    "site:build": "bun run --cwd packages/atelier docs:api && bun run --cwd apps/site build",
     "site:preview": "bun run --cwd apps/site preview"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.16",
+    "typedoc-plugin-markdown": "^4.9.0"
   }
 }
