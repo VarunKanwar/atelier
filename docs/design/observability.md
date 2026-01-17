@@ -129,7 +129,7 @@ Counters:
 Gauges:
 - `queue.in_flight`
 - `queue.pending`
-- `queue.blocked`
+- `queue.waiting`
 - `workers.active`
 
 Histograms:

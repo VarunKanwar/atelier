@@ -108,7 +108,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     taskId: string = `task-${Math.random().toString(36).slice(2)}`,
     taskName?: string,
     maxInFlight: number = 1,
-    maxQueueDepth: number = Number.POSITIVE_INFINITY,
+    maxQueueDepth: number = 2,
     queuePolicy: QueuePolicy = 'block',
     crashPolicy: CrashPolicy = 'restart-fail-in-flight',
     crashMaxRetries: number = 3,
@@ -185,7 +185,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     const snapshot = state ?? this.queue.getState()
     this.emitMetric('gauge', 'queue.in_flight', snapshot.inFlight, this.queueAttrs)
     this.emitMetric('gauge', 'queue.pending', snapshot.pending, this.queueAttrs)
-    this.emitMetric('gauge', 'queue.blocked', snapshot.blocked, this.queueAttrs)
+    this.emitMetric('gauge', 'queue.waiting', snapshot.waiting, this.queueAttrs)
   }
 
   private emitWorkersActive(): void {
@@ -456,7 +456,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     this.haltedError = error
     const rejected = this.queue.rejectAll(error)
     const errorKind = classifyErrorKind(error)
-    for (const payload of [...rejected.pending, ...rejected.blocked, ...rejected.inFlight]) {
+    for (const payload of [...rejected.pending, ...rejected.waiting, ...rejected.inFlight]) {
       this.endSpan(payload.span, 'error', errorKind, error)
     }
     this.queue.pause()
@@ -547,7 +547,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
     const workerStatus = this.crashed ? 'crashed' : this.workerStatus
     const taskStatus = this.manualPaused
       ? 'paused'
-      : queueState.inFlight + queueState.pending + queueState.blocked > 0
+      : queueState.inFlight + queueState.pending + queueState.waiting > 0
         ? 'active'
         : 'idle'
     return {
@@ -559,7 +559,7 @@ export class SingletonWorker<T = any> implements TaskExecutor {
       taskStatus,
       queueDepth: queueState.inFlight,
       pendingQueueDepth: queueState.pending,
-      blockedQueueDepth: queueState.blocked,
+      waitingQueueDepth: queueState.waiting,
       maxInFlight: queueState.maxInFlight,
       maxQueueDepth: queueState.maxQueueDepth,
       queuePolicy: queueState.queuePolicy,

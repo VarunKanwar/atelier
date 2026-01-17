@@ -17,6 +17,20 @@ function simulateWork(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+let errorRate = 0
+let crashNext = false
+
+const clampRate = (value: number) => Math.min(1, Math.max(0, value))
+
+const injectCrashIfNeeded = async () => {
+  if (!crashNext) return
+  crashNext = false
+  setTimeout(() => {
+    throw new Error('Injected worker crash')
+  }, 0)
+  await new Promise(() => {})
+}
+
 const ENHANCEMENTS = [
   'noise reduction',
   'sharpening',
@@ -26,14 +40,21 @@ const ENHANCEMENTS = [
 ]
 
 const handlers = {
+  setErrorRate(rate: number) {
+    errorRate = clampRate(rate)
+  },
+  crashNext() {
+    crashNext = true
+  },
   async process(image: AnalysisResult, ctx: TaskContext): Promise<EnhancedImage> {
     // Simulate enhancement processing (200-600ms)
     const enhancementTime = 200 + Math.random() * 400
     await simulateWork(enhancementTime)
+    await injectCrashIfNeeded()
     ctx.throwIfAborted()
 
-    // Simulate occasional errors (2% failure rate)
-    if (Math.random() < 0.02) {
+    // Simulate optional errors when configured.
+    if (errorRate > 0 && Math.random() < errorRate) {
       throw new Error(`Enhancement failed for ${image.name}: Invalid input format`)
     }
 

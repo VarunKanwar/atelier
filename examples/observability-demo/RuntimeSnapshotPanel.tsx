@@ -1,7 +1,6 @@
 import {
   Badge,
   Box,
-  Collapsible,
   HStack,
   Progress,
   SimpleGrid,
@@ -10,15 +9,18 @@ import {
   Tabs,
   Text,
 } from '@chakra-ui/react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { RuntimeTaskSnapshot, TaskRuntime } from '../../src'
+import type { FlowGraph } from './harness/flow-types'
+import ScenarioFlowCanvas from './harness/ScenarioFlowCanvas'
 import { useRuntimeSnapshot } from './useRuntimeSnapshot'
 
-export type RuntimeObservabilityPanelProps = {
+export type RuntimeSnapshotPanelProps = {
   runtime: TaskRuntime
   title?: string
   intervalMs?: number
   onlyOnChange?: boolean
+  graph?: FlowGraph
 }
 
 const formatLimit = (value?: number): string =>
@@ -30,8 +32,8 @@ const getMax = (value?: number): number | undefined =>
   value !== undefined && Number.isFinite(value) ? value : undefined
 
 const getAlertTone = (task: RuntimeTaskSnapshot): 'danger' | 'warning' | 'ok' => {
-  const blocked = formatCount(task.blockedQueueDepth)
-  if (blocked > 0) return 'danger'
+  const waiting = formatCount(task.waitingQueueDepth)
+  if (waiting > 0) return 'danger'
   const pending = formatCount(task.pendingQueueDepth)
   const maxQueueDepth = getMax(task.maxQueueDepth)
   if (maxQueueDepth && pending / Math.max(1, maxQueueDepth) >= 0.8) return 'warning'
@@ -104,6 +106,34 @@ const WorkerBars = ({ values = [] }: { values?: number[] }) => {
   )
 }
 
+const QueueLegend = () => (
+  <Box borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} bg="gray.50">
+    <Text fontSize="xs" fontWeight="semibold" color="gray.700" mb={2}>
+      Queue states (practical meaning)
+    </Text>
+    <SimpleGrid columns={{ base: 1, md: 3 }} gap={2} fontSize="xs" color="gray.600">
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          In flight
+        </Text>
+        <Text>Work is executing on a worker (active CPU time).</Text>
+      </Box>
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          Pending
+        </Text>
+        <Text>Accepted but not started. Backlog increases memory + latency.</Text>
+      </Box>
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          Waiting
+        </Text>
+        <Text>Caller paused before enqueue. Signal to reduce upstream work.</Text>
+      </Box>
+    </SimpleGrid>
+  </Box>
+)
+
 const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
   const tone = getAlertTone(task)
   const borderColor = tone === 'danger' ? 'red.200' : tone === 'warning' ? 'orange.200' : 'gray.200'
@@ -112,7 +142,7 @@ const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
 
   const inFlight = formatCount(task.queueDepth)
   const pending = formatCount(task.pendingQueueDepth)
-  const blocked = formatCount(task.blockedQueueDepth)
+  const waiting = formatCount(task.waitingQueueDepth)
   const maxInFlight = getMax(task.maxInFlight)
   const maxPending = getMax(task.maxQueueDepth)
 
@@ -143,7 +173,7 @@ const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
       <Stack gap={2} mt={3}>
         <QueueBar label="In flight" value={inFlight} max={maxInFlight} tone={tone} />
         <QueueBar label="Pending" value={pending} max={maxPending} tone={tone} />
-        <MetricRow label="Blocked" value={`${blocked}`} />
+        <MetricRow label="Waiting" value={`${waiting}`} />
       </Stack>
 
       {task.type === 'parallel' ? (
@@ -166,13 +196,13 @@ const EmptyState = ({ label }: { label: string }) => (
   </Box>
 )
 
-const RuntimeObservabilityPanel = ({
+const RuntimeSnapshotPanel = ({
   runtime,
-  title = 'Atelier',
+  title = 'Runtime snapshot',
   intervalMs,
   onlyOnChange,
-}: RuntimeObservabilityPanelProps) => {
-  const [expanded, setExpanded] = useState(false)
+  graph,
+}: RuntimeSnapshotPanelProps) => {
   const { snapshot, updatedAt } = useRuntimeSnapshot(runtime, {
     intervalMs,
     onlyOnChange,
@@ -198,7 +228,7 @@ const RuntimeObservabilityPanel = ({
             <Table.ColumnHeader>Workers</Table.ColumnHeader>
             <Table.ColumnHeader textAlign="end">In flight</Table.ColumnHeader>
             <Table.ColumnHeader textAlign="end">Pending</Table.ColumnHeader>
-            <Table.ColumnHeader textAlign="end">Blocked</Table.ColumnHeader>
+            <Table.ColumnHeader textAlign="end">Waiting</Table.ColumnHeader>
             <Table.ColumnHeader>Policy</Table.ColumnHeader>
           </Table.Row>
         </Table.Header>
@@ -238,7 +268,7 @@ const RuntimeObservabilityPanel = ({
                 <Table.Cell textAlign="end">
                   {formatCount(task.pendingQueueDepth)}/{formatLimit(task.maxQueueDepth)}
                 </Table.Cell>
-                <Table.Cell textAlign="end">{formatCount(task.blockedQueueDepth)}</Table.Cell>
+                <Table.Cell textAlign="end">{formatCount(task.waitingQueueDepth)}</Table.Cell>
                 <Table.Cell>{task.queuePolicy ?? 'block'}</Table.Cell>
               </Table.Row>
             ))
@@ -248,7 +278,15 @@ const RuntimeObservabilityPanel = ({
     </Table.ScrollArea>
   )
 
-  const graphContent = (
+  const graphContent = graph ? (
+    <Stack gap={3}>
+      <Text fontSize="sm" color="gray.500">
+        Pipeline layout is demo-defined (not auto-inferred).
+      </Text>
+      <ScenarioFlowCanvas graph={graph} snapshot={snapshot} />
+      <QueueLegend />
+    </Stack>
+  ) : (
     <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>
       <Box>
         <HStack justify="space-between" mb={3}>
@@ -286,49 +324,36 @@ const RuntimeObservabilityPanel = ({
 
   return (
     <Box borderWidth="1px" borderColor="gray.200" rounded="xl" p={6} bg="white">
-      <Collapsible.Root open={expanded} onOpenChange={event => setExpanded(event.open)}>
-        <HStack justify="space-between" align="center" mb={4} gap={4}>
-          <Box>
-            <Text fontSize="lg" fontWeight="semibold">
-              {title}
-            </Text>
-            <Text fontSize="xs" color="gray.500">
-              Updated {new Date(updatedAt).toLocaleTimeString()}
-            </Text>
-          </Box>
-          <HStack gap={2}>
-            <Badge bg="gray.100" color="gray.700">
-              {tasks.length} task{tasks.length === 1 ? '' : 's'}
-            </Badge>
-            <Collapsible.Trigger asChild>
-              <Text fontSize="xs" color="gray.500" cursor="pointer">
-                {expanded ? 'Collapse' : 'Expand'}
-              </Text>
-            </Collapsible.Trigger>
-          </HStack>
-        </HStack>
+      <HStack justify="space-between" align="center" mb={4} gap={4}>
+        <Box>
+          <Text fontSize="lg" fontWeight="semibold">
+            {title}
+          </Text>
+          <Text fontSize="xs" color="gray.500">
+            Updated {new Date(updatedAt).toLocaleTimeString()}
+          </Text>
+        </Box>
+        <Badge bg="gray.100" color="gray.700">
+          {tasks.length} task{tasks.length === 1 ? '' : 's'}
+        </Badge>
+      </HStack>
 
-        <Tabs.Root defaultValue="table">
-          <Tabs.List display="flex" gap={2} mb={4}>
-            <Tabs.Trigger value="table">Table</Tabs.Trigger>
-            <Tabs.Trigger value="graph">Graph</Tabs.Trigger>
-          </Tabs.List>
+      <Tabs.Root defaultValue="graph">
+        <Tabs.List display="flex" gap={2} mb={4}>
+          <Tabs.Trigger value="graph">Graph</Tabs.Trigger>
+          <Tabs.Trigger value="table">Table</Tabs.Trigger>
+        </Tabs.List>
 
-          <Tabs.Content value="table">
-            <Collapsible.Content>
-              <Box pr={2}>{tableContent}</Box>
-            </Collapsible.Content>
-          </Tabs.Content>
+        <Tabs.Content value="graph">
+          <Box pr={2}>{graphContent}</Box>
+        </Tabs.Content>
 
-          <Tabs.Content value="graph">
-            <Collapsible.Content>
-              <Box pr={2}>{graphContent}</Box>
-            </Collapsible.Content>
-          </Tabs.Content>
-        </Tabs.Root>
-      </Collapsible.Root>
+        <Tabs.Content value="table">
+          <Box pr={2}>{tableContent}</Box>
+        </Tabs.Content>
+      </Tabs.Root>
     </Box>
   )
 }
 
-export default RuntimeObservabilityPanel
+export default RuntimeSnapshotPanel
