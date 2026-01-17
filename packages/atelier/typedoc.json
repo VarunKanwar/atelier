@@ -1,0 +1,13 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "tsconfig": "./tsconfig.json",
+  "out": "../../apps/site/public/api",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "cleanOutputDir": true,
+  "sort": ["source-order"],
+  "gitRevision": "main"
+}
