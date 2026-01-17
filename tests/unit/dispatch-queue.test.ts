@@ -335,6 +335,73 @@ describe('DispatchQueue', () => {
       gate.resolve()
     })
 
+    it('wakes the next waiter if a granted permit aborts before enqueue', async () => {
+      const gates = new Map<string, ReturnType<typeof deferred<void>>>()
+      const ensureGate = (id: string) => {
+        const gate = deferred<void>()
+        gates.set(id, gate)
+        return gate
+      }
+
+      ensureGate('in-flight')
+      ensureGate('pending')
+      ensureGate('waiting-a')
+      ensureGate('waiting-b')
+
+      const controllerA = new AbortController()
+      const controllerB = new AbortController()
+      let sawTwoWaiters = false
+      let aborted = false
+
+      const queue = new DispatchQueue<Payload>(
+        async payload => {
+          const gate = gates.get(payload.id)
+          if (gate) {
+            await gate.promise
+          }
+          return payload.id
+        },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
+        {
+          onStateChange: state => {
+            if (state.waiting === 2) {
+              sawTwoWaiters = true
+            }
+            if (sawTwoWaiters && !aborted && state.waiting === 1 && state.pending === 0) {
+              aborted = true
+              controllerA.abort()
+            }
+          },
+        }
+      )
+
+      queue.enqueue({ id: 'in-flight' })
+      queue.enqueue({ id: 'pending' })
+
+      const waitingA = queue.enqueue({ id: 'waiting-a' }, { signal: controllerA.signal })
+      const waitingB = queue.enqueue({ id: 'waiting-b' }, { signal: controllerB.signal })
+      await tick()
+
+      expect(queue.getState().waiting).toBe(2)
+
+      gates.get('in-flight')!.resolve()
+      await tick()
+      await tick()
+
+      await expect(waitingA).rejects.toMatchObject({ name: 'AbortError' })
+      await tick()
+
+      const stateAfterAbort = queue.getState()
+      expect(stateAfterAbort.waiting).toBe(0)
+      expect(stateAfterAbort.pending).toBe(1)
+
+      gates.get('waiting-a')!.resolve()
+      gates.get('pending')!.resolve()
+      await tick()
+      gates.get('waiting-b')!.resolve()
+      await waitingB
+    })
+
     it('rejects an in-flight entry when its signal aborts', async () => {
       const gate = deferred<void>()
       const queue = new DispatchQueue<Payload>(

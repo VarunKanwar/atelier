@@ -129,11 +129,19 @@ export class DispatchQueue<T> {
         if (permitAcquired === null) return
 
         if (this.rejectIfDisposed(payload, reject)) {
-          if (permitAcquired) this.releasePendingPermit()
+          if (permitAcquired) {
+            this.releasePendingPermit()
+            this.notifyCapacityWaiters()
+            this.notifyStateChange()
+          }
           return
         }
         if (this.rejectIfAborted(payload, signal, reject)) {
-          if (permitAcquired) this.releasePendingPermit()
+          if (permitAcquired) {
+            this.releasePendingPermit()
+            this.notifyCapacityWaiters()
+            this.notifyStateChange()
+          }
           return
         }
         if (this.applyOverflowPolicy(payload, reject)) return
