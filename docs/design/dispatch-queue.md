@@ -54,3 +54,12 @@ terminated worker is ignored.
 Queue wait is measured per dispatch attempt from call time (before capacity
 waiting) to dispatch time using the same `now()` utility as span timing to keep
 measurements consistent.
+
+## Practical meaning for app developers
+
+- **In flight**: work is running on a worker. This is active CPU time.
+- **Pending**: work is accepted but not started. The runtime holds the payload,
+  so memory and latency grow with backlog size.
+- **Waiting**: the caller is paused before the runtime accepts the work. This
+  is a signal to reduce upstream concurrency or defer large allocations until
+  capacity is available.

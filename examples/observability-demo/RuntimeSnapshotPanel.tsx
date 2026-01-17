@@ -106,6 +106,34 @@ const WorkerBars = ({ values = [] }: { values?: number[] }) => {
   )
 }
 
+const QueueLegend = () => (
+  <Box borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} bg="gray.50">
+    <Text fontSize="xs" fontWeight="semibold" color="gray.700" mb={2}>
+      Queue states (practical meaning)
+    </Text>
+    <SimpleGrid columns={{ base: 1, md: 3 }} gap={2} fontSize="xs" color="gray.600">
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          In flight
+        </Text>
+        <Text>Work is executing on a worker (active CPU time).</Text>
+      </Box>
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          Pending
+        </Text>
+        <Text>Accepted but not started. Backlog increases memory + latency.</Text>
+      </Box>
+      <Box>
+        <Text fontWeight="semibold" color="gray.800">
+          Waiting
+        </Text>
+        <Text>Caller paused before enqueue. Signal to reduce upstream work.</Text>
+      </Box>
+    </SimpleGrid>
+  </Box>
+)
+
 const TaskCard = ({ task }: { task: RuntimeTaskSnapshot }) => {
   const tone = getAlertTone(task)
   const borderColor = tone === 'danger' ? 'red.200' : tone === 'warning' ? 'orange.200' : 'gray.200'
@@ -256,6 +284,7 @@ const RuntimeSnapshotPanel = ({
         Pipeline layout is demo-defined (not auto-inferred).
       </Text>
       <ScenarioFlowCanvas graph={graph} snapshot={snapshot} />
+      <QueueLegend />
     </Stack>
   ) : (
     <SimpleGrid columns={{ base: 1, lg: 2 }} gap={6}>

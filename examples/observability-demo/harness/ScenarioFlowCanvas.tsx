@@ -23,9 +23,13 @@ import type { FlowGraph } from './flow-types'
 
 type TaskNodeData = { label: string; kind: string; state?: RuntimeTaskSnapshot }
 type TaskNodeType = Node<TaskNodeData, 'task'>
+type TerminalNodeData = { label: string; kind: 'source' | 'sink' }
+type TerminalNodeType = Node<TerminalNodeData, 'terminal'>
 
 type QueueEdgeData = { label: string; pending: number; waiting: number; maxDepth?: number }
 type QueueEdgeType = Edge<QueueEdgeData, 'queue'>
+type ExternalEdgeData = { label?: string }
+type ExternalEdgeType = Edge<ExternalEdgeData, 'external'>
 
 export type ScenarioFlowCanvasProps = {
   graph: FlowGraph
@@ -152,6 +156,35 @@ const TaskNode = ({ data }: NodeProps<TaskNodeType>) => {
   )
 }
 
+const TerminalNode = ({ data }: NodeProps<TerminalNodeType>) => {
+  const description = data.kind === 'source' ? 'External input' : 'External output'
+  return (
+    <Box
+      bg="gray.50"
+      borderWidth="1px"
+      borderStyle="dashed"
+      borderColor="gray.300"
+      rounded="lg"
+      p={4}
+      minW="160px"
+      position="relative"
+    >
+      <Handle
+        type={data.kind === 'source' ? 'source' : 'target'}
+        position={data.kind === 'source' ? Position.Right : Position.Left}
+        style={{ opacity: 0, width: 1, height: 1, border: 'none' }}
+      />
+      <Stack gap={1}>
+        <Text fontWeight="semibold" lineClamp={1}>
+          {data.label}
+        </Text>
+        <Text fontSize="xs" color="gray.500">
+          {description}
+        </Text>
+      </Stack>
+    </Box>
+  )
+}
 const QueueLabel = ({ data }: { data: QueueEdgeData }) => {
   return (
     <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} minW="160px">
@@ -219,12 +252,60 @@ const QueueEdge = ({
   )
 }
 
+const ExternalEdge = ({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  data,
+}: EdgeProps<ExternalEdgeType>) => {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  })
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ strokeDasharray: '6 6' }} />
+      {data?.label ? (
+        <EdgeLabelRenderer>
+          <Box
+            style={{
+              position: 'absolute',
+              transform: 'translate(-50%, -50%)',
+              left: `${labelX}px`,
+              top: `${labelY}px`,
+              pointerEvents: 'all',
+            }}
+            className="nodrag nopan"
+          >
+            <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="full" px={2} py={1}>
+              <Text fontSize="xs" color="gray.600">
+                {data.label}
+              </Text>
+            </Box>
+          </Box>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  )
+}
+
 const nodeTypes = {
   task: TaskNode,
+  terminal: TerminalNode,
 } as const
 
 const edgeTypes = {
   queue: QueueEdge,
+  external: ExternalEdge,
 } as const
 
 const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
@@ -244,31 +325,47 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
 
     graph.nodes.forEach(node => {
       const pos = positions[node.id] ?? { x: 0, y: 0 }
+      const isTerminal = node.kind === 'source' || node.kind === 'sink'
       nodes.push({
         id: node.id,
-        type: 'task',
+        type: isTerminal ? 'terminal' : 'task',
         position: pos,
-        data: { label: node.label, kind: node.kind, state: taskState.get(node.taskId) },
+        data: isTerminal
+          ? { label: node.label, kind: node.kind }
+          : { label: node.label, kind: node.kind, state: taskState.get(node.taskId) },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        style: { width: TASK_WIDTH, height: TASK_HEIGHT },
+        style: {
+          width: isTerminal ? 180 : TASK_WIDTH,
+          height: isTerminal ? 120 : TASK_HEIGHT,
+        },
       })
     })
 
     graph.edges.forEach(edge => {
       const queueTask = taskState.get(edge.to)
+      const isExternal = edge.kind === 'external'
       edges.push({
         id: `queue-${edge.from}-${edge.to}`,
         source: edge.from,
         target: edge.to,
-        type: 'queue',
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#CBD5E0' },
-        data: {
-          label: edge.label ?? 'queue',
-          pending: queueTask?.pendingQueueDepth ?? 0,
-          waiting: queueTask?.waitingQueueDepth ?? 0,
-          maxDepth: queueTask?.maxQueueDepth,
-        } satisfies QueueEdgeData,
+        type: isExternal ? 'external' : 'queue',
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 14,
+          height: 14,
+          color: isExternal ? '#A0AEC0' : '#CBD5E0',
+        },
+        ...(isExternal
+          ? { data: { label: edge.label } satisfies ExternalEdgeData }
+          : {
+              data: {
+                label: edge.label ?? 'queue',
+                pending: queueTask?.pendingQueueDepth ?? 0,
+                waiting: queueTask?.waitingQueueDepth ?? 0,
+                maxDepth: queueTask?.maxQueueDepth,
+              } satisfies QueueEdgeData,
+            }),
       })
     })
 

@@ -30,15 +30,19 @@ type RunStatus = 'idle' | 'running' | 'done'
 
 const graph: FlowGraph = {
   nodes: [
+    { id: 'source', taskId: 'source', label: 'Source', kind: 'source' },
     { id: 'resize', taskId: 'resize', label: 'Resize', kind: 'parallel' },
     { id: 'analyze', taskId: 'analyze', label: 'Analyze', kind: 'singleton' },
     { id: 'enhance', taskId: 'enhance', label: 'Enhance', kind: 'singleton' },
+    { id: 'sink', taskId: 'sink', label: 'External', kind: 'sink' },
   ],
   edges: [
+    { from: 'source', to: 'resize', label: 'queue' },
     { from: 'resize', to: 'analyze', label: 'queue' },
     { from: 'analyze', to: 'enhance', label: 'queue' },
+    { from: 'enhance', to: 'sink', label: 'downstream', kind: 'external' },
   ],
-  order: ['resize', 'analyze', 'enhance'],
+  order: ['source', 'resize', 'analyze', 'enhance', 'sink'],
 }
 
 const queuePolicies: { label: string; value: QueuePolicy }[] = [
