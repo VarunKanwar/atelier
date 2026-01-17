@@ -1,22 +1,9 @@
-import {
-  Box,
-  Button,
-  createListCollection,
-  HStack,
-  Input,
-  Portal,
-  Select,
-  Stack,
-  Text,
-} from '@chakra-ui/react'
+import { Box, Button, HStack, Input, Stack, Text } from '@chakra-ui/react'
+import { createTaskRuntime } from '@varunkanwar/atelier'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import { createTaskRuntime } from '../../../src'
-import type { CrashPolicy } from '../../../src/types'
 import type { FlowGraph } from '../harness/flow-types'
 import ScenarioShell from '../harness/ScenarioShell'
 import RuntimeSnapshotPanel from '../RuntimeSnapshotPanel'
-import { useRuntimeEvents } from '../useRuntimeEvents'
 import {
   createImagePipelineTasks,
   disposeImagePipelineTasks,
@@ -25,7 +12,7 @@ import {
   runImagePipeline,
 } from '../workflows/image-pipeline'
 import type { ScenarioComponentProps, ScenarioDefinition } from './types'
-import { clampNumber } from './utils'
+import { clampNumber, isAbortError } from './utils'
 
 type RunStatus = 'idle' | 'running' | 'done'
 
@@ -46,49 +33,21 @@ const graph: FlowGraph = {
   order: ['source', 'resize', 'analyze', 'enhance', 'sink'],
 }
 
-const crashPolicies: { label: string; value: CrashPolicy }[] = [
-  { label: 'Restart + fail in-flight', value: 'restart-fail-in-flight' },
-  { label: 'Restart + requeue', value: 'restart-requeue-in-flight' },
-  { label: 'Fail task', value: 'fail-task' },
-]
-
-const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
+const CancellationScenario = (_props: ScenarioComponentProps) => {
   const runtime = useMemo(() => createTaskRuntime({ observability: { spans: 'off' } }), [])
   const tasksRef = useRef<PipelineTasks | null>(null)
-  const [batchSize, setBatchSize] = useState(24)
+  const [batchSize, setBatchSize] = useState(28)
   const [concurrencyLimit, setConcurrencyLimit] = useState(6)
-  const [crashPolicy, setCrashPolicy] = useState<CrashPolicy>('restart-requeue-in-flight')
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [completed, setCompleted] = useState(0)
   const [failed, setFailed] = useState(0)
-  const [crashArmed, setCrashArmed] = useState(false)
+  const [canceled, setCanceled] = useState(0)
+  const [runKey, setRunKey] = useState<string | null>(null)
   const runIdRef = useRef(0)
-  const crashRequestedRef = useRef(false)
-  const { stats } = useRuntimeEvents(runtime)
-  const crashPolicyCollection = useMemo(
-    () =>
-      createListCollection({
-        items: crashPolicies,
-      }),
-    []
-  )
-
-  const buildTasks = useCallback(() => {
-    disposeImagePipelineTasks(tasksRef.current)
-    tasksRef.current = createImagePipelineTasks(runtime, {
-      analyze: {
-        crashPolicy,
-        crashMaxRetries: 2,
-      },
-    })
-  }, [crashPolicy, runtime])
 
   if (!tasksRef.current) {
     tasksRef.current = createImagePipelineTasks(runtime, {
-      analyze: {
-        crashPolicy,
-        crashMaxRetries: 2,
-      },
+      analyze: { maxQueueDepth: 10, queuePolicy: 'block' },
     })
   }
 
@@ -98,28 +57,23 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
     }
   }, [])
 
-  const handleRestartTasks = useCallback(() => {
-    buildTasks()
-    setRunStatus('idle')
-    setCompleted(0)
-    setFailed(0)
-    crashRequestedRef.current = false
-    setCrashArmed(false)
-  }, [buildTasks])
-
   const handleRun = useCallback(async () => {
     if (runStatus === 'running') return
     const tasks = tasksRef.current
     if (!tasks) return
 
     const runId = ++runIdRef.current
-    const resolvedBatch = clampNumber(batchSize, 24, 1, 200)
+    const resolvedBatch = clampNumber(batchSize, 28, 1, 200)
     const resolvedLimit = clampNumber(concurrencyLimit, 6, 1, 64)
+    const nextKey = `cancel-run-${runId}`
 
+    runtime.abortTaskController.clear(nextKey)
+    const signal = runtime.abortTaskController.signalFor(nextKey)
+    setRunKey(nextKey)
     setRunStatus('running')
     setCompleted(0)
     setFailed(0)
-    setCrashArmed(crashRequestedRef.current)
+    setCanceled(0)
 
     const images = generateImages(resolvedBatch)
 
@@ -128,19 +82,18 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
         tasks,
         images,
         concurrencyLimit: resolvedLimit,
-        beforeStage: async stage => {
-          if (stage !== 'analyze') return
-          if (!crashRequestedRef.current) return
-          crashRequestedRef.current = false
-          setCrashArmed(false)
-          await tasks.analyze.crashNext()
-        },
+        dispatchOptions: { key: nextKey, signal },
       })) {
         if (runIdRef.current !== runId) break
         if (result.status === 'fulfilled') {
           setCompleted(prev => prev + 1)
         } else {
-          setFailed(prev => prev + 1)
+          const isCanceled = isAbortError(result.error)
+          if (isCanceled) {
+            setCanceled(prev => prev + 1)
+          } else {
+            setFailed(prev => prev + 1)
+          }
         }
       }
     } finally {
@@ -148,14 +101,12 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
         setRunStatus('done')
       }
     }
-  }, [batchSize, concurrencyLimit, runStatus])
+  }, [batchSize, concurrencyLimit, runtime, runStatus])
 
-  const handleCrashNext = useCallback(() => {
-    const tasks = tasksRef.current
-    if (!tasks) return
-    crashRequestedRef.current = true
-    setCrashArmed(true)
-  }, [])
+  const handleAbort = useCallback(() => {
+    if (!runKey) return
+    runtime.abortTaskController.abort(runKey)
+  }, [runKey, runtime])
 
   const Divider = () => <Box borderTopWidth="1px" borderColor="gray.200" />
 
@@ -163,42 +114,6 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
     <Stack gap={0}>
       <Box p={4}>
         <Stack gap={3}>
-          <Box>
-            <Text fontSize="xs" color="gray.500" mb={1}>
-              Crash policy
-            </Text>
-            <Select.Root
-              size="sm"
-              value={[crashPolicy]}
-              onValueChange={event => {
-                const next = event.value[0] as CrashPolicy | undefined
-                if (next) setCrashPolicy(next)
-              }}
-              collection={crashPolicyCollection}
-            >
-              <Select.HiddenSelect />
-              <Select.Control>
-                <Select.Trigger>
-                  <Select.ValueText placeholder="Select policy" />
-                </Select.Trigger>
-                <Select.IndicatorGroup>
-                  <Select.Indicator />
-                </Select.IndicatorGroup>
-              </Select.Control>
-              <Portal>
-                <Select.Positioner>
-                  <Select.Content>
-                    {crashPolicies.map(item => (
-                      <Select.Item key={item.value} item={item}>
-                        {item.label}
-                        <Select.ItemIndicator />
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Positioner>
-              </Portal>
-            </Select.Root>
-          </Box>
           <Box>
             <Text fontSize="xs" color="gray.500" mb={1}>
               Batch size
@@ -231,12 +146,7 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
       <Divider />
 
       <Box p={4}>
-        {crashArmed && (
-          <Text fontSize="xs" color="orange.600" mb={3}>
-            Crash armed — next analyze call will crash.
-          </Text>
-        )}
-        <HStack gap={2}>
+        <HStack gap={2} mb={3}>
           <Button
             size="sm"
             onClick={handleRun}
@@ -245,13 +155,18 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
           >
             {runStatus === 'running' ? 'Running…' : 'Run'}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleCrashNext}>
-            Crash next
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleRestartTasks}>
-            Restart
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleAbort}
+            disabled={!runKey || runStatus !== 'running'}
+          >
+            Abort
           </Button>
         </HStack>
+        <Text fontSize="xs" color="gray.500">
+          Key: {runKey ?? '—'}
+        </Text>
       </Box>
     </Stack>
   )
@@ -265,21 +180,15 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
         </Text>
       </HStack>
       <HStack gap={2}>
+        <Text>Canceled</Text>
+        <Text fontWeight="semibold" color="orange.600">
+          {canceled}
+        </Text>
+      </HStack>
+      <HStack gap={2}>
         <Text>Failed</Text>
         <Text fontWeight="semibold" color="gray.800">
           {failed}
-        </Text>
-      </HStack>
-      <HStack gap={2}>
-        <Text>Crashes</Text>
-        <Text fontWeight="semibold" color="orange.600">
-          {stats.counters['worker.crash.total'] ?? 0}
-        </Text>
-      </HStack>
-      <HStack gap={2}>
-        <Text>Requeued</Text>
-        <Text fontWeight="semibold" color="gray.800">
-          {stats.counters['task.requeue.total'] ?? 0}
         </Text>
       </HStack>
     </HStack>
@@ -294,11 +203,11 @@ const CrashRecoveryScenario = (_props: ScenarioComponentProps) => {
   )
 }
 
-export const crashRecoveryScenario: ScenarioDefinition = {
+export const cancellationScenario: ScenarioDefinition = {
   meta: {
-    id: 'crash-recovery',
-    title: 'Crash recovery',
-    summary: 'Inject worker crashes and compare recovery policies.',
+    id: 'cancellation',
+    title: 'Cancellation',
+    summary: 'Abort a workload and see queued vs in-flight cancellation.',
   },
-  Component: CrashRecoveryScenario,
+  Component: CancellationScenario,
 }

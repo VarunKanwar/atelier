@@ -9,10 +9,10 @@ import {
   Stack,
   Text,
 } from '@chakra-ui/react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { QueuePolicy } from '@varunkanwar/atelier'
 
-import { createTaskRuntime } from '../../../src'
-import type { QueuePolicy } from '../../../src/types'
+import { createTaskRuntime } from '@varunkanwar/atelier'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FlowGraph } from '../harness/flow-types'
 import ScenarioShell from '../harness/ScenarioShell'
 import RuntimeSnapshotPanel from '../RuntimeSnapshotPanel'

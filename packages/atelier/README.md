@@ -180,10 +180,10 @@ Recommended usage:
 
 ## Docs
 
-- [Design](./docs/design/README.md) - Architecture and design decisions
-- [Observability Design](./docs/design/observability.md) - Telemetry model and decisions
-- [API Reference](./docs/api-reference.md) - Complete API documentation
-- [Testing](./docs/testing.md) - Testing patterns
+- [Design](https://github.com/VarunKanwar/atelier/blob/main/docs/design/README.md) - Architecture and design decisions
+- [Observability Design](https://github.com/VarunKanwar/atelier/blob/main/docs/design/observability.md) - Telemetry model and decisions
+- [API Reference](https://github.com/VarunKanwar/atelier/blob/main/docs/api-reference.md) - Complete API documentation
+- [Testing](https://github.com/VarunKanwar/atelier/blob/main/docs/testing.md) - Testing patterns
 
 ## Development
 

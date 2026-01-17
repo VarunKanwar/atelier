@@ -3,8 +3,8 @@
  * Simulates ML-based image enhancement (GPU-bound, bottlenecked resource)
  */
 
+import { createTaskWorker, type StripTaskContext, type TaskContext } from '@varunkanwar/atelier'
 import { expose } from 'comlink'
-import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../src/task-worker'
 import type { AnalysisResult } from './analyze.worker'
 
 export interface EnhancedImage extends AnalysisResult {

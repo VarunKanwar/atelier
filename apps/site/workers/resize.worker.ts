@@ -3,8 +3,8 @@
  * Simulates image resizing (CPU-bound, parallelizable)
  */
 
+import { createTaskWorker, type StripTaskContext, type TaskContext } from '@varunkanwar/atelier'
 import { expose } from 'comlink'
-import { createTaskWorker, type StripTaskContext, type TaskContext } from '../../../src/task-worker'
 
 export interface ImageData {
   name: string

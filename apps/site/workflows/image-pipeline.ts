@@ -1,6 +1,5 @@
-import { parallelLimit, type TaskRuntime } from '../../../src'
-import type { Task } from '../../../src/define-task'
-import type { TaskConfig, TaskDispatchOptions } from '../../../src/types'
+import type { Task, TaskConfig, TaskDispatchOptions } from '@varunkanwar/atelier'
+import { parallelLimit, type TaskRuntime } from '@varunkanwar/atelier'
 
 import type { AnalyzeAPI } from '../workers/analyze.worker'
 import type { EnhanceAPI } from '../workers/enhance.worker'
