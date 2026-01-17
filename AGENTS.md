@@ -49,7 +49,7 @@ Prefer small, well-scoped changes and keep types precise.
 - **Crash recovery**: handled in executors with backoff and policy-based
   behavior; ensure changes keep `WorkerCrashedError` semantics consistent.
 - **Cancellation**: keyed cancellation (`AbortTaskController`) is runtime-scoped.
-  Ensure cancellation phases (queued/blocked/in-flight) remain consistent.
+  Ensure cancellation phases (waiting/queued/in-flight) remain consistent.
 
 ## Observability Work
 
@@ -68,4 +68,3 @@ Avoid in-library aggregation (p50/p95) unless explicitly requested.
 - Queue policies (`block`, `reject`, `drop-latest`, `drop-oldest`) have subtle
   semantics; update tests if changing behavior.
 - Avoid relying on Node-only APIs; this is browser-first.
-

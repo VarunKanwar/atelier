@@ -141,7 +141,7 @@ describe('DispatchQueue', () => {
       expect(results).not.toContain('will-be-dropped')
     })
 
-    it('block: holds items in blocked queue until capacity available', async () => {
+    it('block: waits at call site until capacity available', async () => {
       const gate = deferred<string>()
       const queue = new DispatchQueue<Payload>(async () => gate.promise, {
         maxInFlight: 1,
@@ -151,15 +151,15 @@ describe('DispatchQueue', () => {
 
       queue.enqueue({ id: 'in-flight' })
       queue.enqueue({ id: 'pending' })
-      const blocked = queue.enqueue({ id: 'blocked' })
+      const waiting = queue.enqueue({ id: 'waiting' })
       await tick()
 
       expect(queue.getState().inFlight).toBe(1)
       expect(queue.getState().pending).toBe(1)
-      expect(queue.getState().blocked).toBe(1)
+      expect(queue.getState().waiting).toBe(1)
 
       gate.resolve('done')
-      const result = await blocked
+      const result = await waiting
       expect(result).toBe('done')
     })
   })
@@ -178,7 +178,7 @@ describe('DispatchQueue', () => {
       expect(state.queuePolicy).toBe('reject')
       expect(state.inFlight).toBe(0)
       expect(state.pending).toBe(0)
-      expect(state.blocked).toBe(0)
+      expect(state.waiting).toBe(0)
       expect(state.paused).toBe(false)
       expect(state.disposed).toBe(false)
     })
@@ -311,6 +311,97 @@ describe('DispatchQueue', () => {
       await first
     })
 
+    it('rejects a waiting entry when its signal aborts', async () => {
+      const gate = deferred<void>()
+      const queue = new DispatchQueue<Payload>(
+        async () => {
+          await gate.promise
+          return 'ok'
+        },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' }
+      )
+
+      queue.enqueue({ id: 'in-flight' })
+      queue.enqueue({ id: 'pending' })
+
+      const controller = new AbortController()
+      const waiting = queue.enqueue({ id: 'waiting' }, { signal: controller.signal })
+      await tick()
+
+      controller.abort()
+
+      await expect(waiting).rejects.toMatchObject({ name: 'AbortError' })
+
+      gate.resolve()
+    })
+
+    it('wakes the next waiter if a granted permit aborts before enqueue', async () => {
+      const gates = new Map<string, ReturnType<typeof deferred<void>>>()
+      const ensureGate = (id: string) => {
+        const gate = deferred<void>()
+        gates.set(id, gate)
+        return gate
+      }
+
+      ensureGate('in-flight')
+      ensureGate('pending')
+      ensureGate('waiting-a')
+      ensureGate('waiting-b')
+
+      const controllerA = new AbortController()
+      const controllerB = new AbortController()
+      let sawTwoWaiters = false
+      let aborted = false
+
+      const queue = new DispatchQueue<Payload>(
+        async payload => {
+          const gate = gates.get(payload.id)
+          if (gate) {
+            await gate.promise
+          }
+          return payload.id
+        },
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
+        {
+          onStateChange: state => {
+            if (state.waiting === 2) {
+              sawTwoWaiters = true
+            }
+            if (sawTwoWaiters && !aborted && state.waiting === 1 && state.pending === 0) {
+              aborted = true
+              controllerA.abort()
+            }
+          },
+        }
+      )
+
+      queue.enqueue({ id: 'in-flight' })
+      queue.enqueue({ id: 'pending' })
+
+      const waitingA = queue.enqueue({ id: 'waiting-a' }, { signal: controllerA.signal })
+      const waitingB = queue.enqueue({ id: 'waiting-b' }, { signal: controllerB.signal })
+      await tick()
+
+      expect(queue.getState().waiting).toBe(2)
+
+      gates.get('in-flight')!.resolve()
+      await tick()
+      await tick()
+
+      await expect(waitingA).rejects.toMatchObject({ name: 'AbortError' })
+      await tick()
+
+      const stateAfterAbort = queue.getState()
+      expect(stateAfterAbort.waiting).toBe(0)
+      expect(stateAfterAbort.pending).toBe(1)
+
+      gates.get('waiting-a')!.resolve()
+      gates.get('pending')!.resolve()
+      await tick()
+      gates.get('waiting-b')!.resolve()
+      await waitingB
+    })
+
     it('rejects an in-flight entry when its signal aborts', async () => {
       const gate = deferred<void>()
       const queue = new DispatchQueue<Payload>(
@@ -376,25 +467,6 @@ describe('DispatchQueue', () => {
       expect(onDispatch).toHaveBeenCalledWith({ id: 'a' }, expect.any(Number))
     })
 
-    it('calls onBlocked when item is blocked', async () => {
-      const gate = deferred<string>()
-      const onBlocked = vi.fn()
-      const queue = new DispatchQueue<Payload>(
-        async () => gate.promise,
-        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
-        { onBlocked }
-      )
-
-      queue.enqueue({ id: 'in-flight' })
-      queue.enqueue({ id: 'pending' })
-      queue.enqueue({ id: 'blocked' })
-      await tick()
-
-      expect(onBlocked).toHaveBeenCalledWith({ id: 'blocked' }, 1, 1)
-
-      gate.resolve('done')
-    })
-
     it('calls onReject when item is dropped', async () => {
       const gate = deferred<string>()
       const onReject = vi.fn()
@@ -433,6 +505,32 @@ describe('DispatchQueue', () => {
       await tick()
 
       expect(onCancel).toHaveBeenCalledWith({ id: 'pending' }, 'queued')
+
+      gate.resolve('done')
+    })
+
+    it('calls onCancel when waiting item is aborted', async () => {
+      const gate = deferred<string>()
+      const onCancel = vi.fn()
+      const queue = new DispatchQueue<Payload>(
+        async () => gate.promise,
+        { maxInFlight: 1, maxQueueDepth: 1, queuePolicy: 'block' },
+        { onCancel }
+      )
+
+      queue.enqueue({ id: 'in-flight' })
+      queue.enqueue({ id: 'pending' })
+
+      const controller = new AbortController()
+      const waiting = queue
+        .enqueue({ id: 'waiting' }, { signal: controller.signal })
+        .catch(() => {})
+      await tick()
+
+      controller.abort()
+      await waiting
+
+      expect(onCancel).toHaveBeenCalledWith({ id: 'waiting' }, 'waiting')
 
       gate.resolve('done')
     })

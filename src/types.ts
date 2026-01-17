@@ -27,10 +27,10 @@ export interface TaskConfig {
   // Defaults: poolSize for parallel, 1 for singleton.
   maxInFlight?: number
   // Maximum number of queued (pending) calls waiting to be dispatched.
-  // Defaults to Infinity.
+  // Defaults: parallel => maxInFlight * 2, singleton => 2.
   maxQueueDepth?: number
   // Queue policy when maxQueueDepth is reached.
-  // - block: wait for capacity
+  // - block: wait at the call site for capacity
   // - reject: reject immediately
   // - drop-latest: reject newest
   // - drop-oldest: reject oldest pending entry, accept new
@@ -59,8 +59,8 @@ export interface WorkerState {
   queueDepth?: number
   /** Pending calls waiting in the executor queue. */
   pendingQueueDepth?: number
-  /** Calls blocked waiting for queue capacity (block policy only). */
-  blockedQueueDepth?: number
+  /** Calls waiting for queue capacity (block policy only). */
+  waitingQueueDepth?: number
   /** Maximum in-flight calls allowed. */
   maxInFlight?: number
   /** Maximum pending queue depth allowed. */

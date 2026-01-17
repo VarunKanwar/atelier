@@ -24,15 +24,36 @@ function simulateWork(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+let errorRate = 0
+let crashNext = false
+
+const clampRate = (value: number) => Math.min(1, Math.max(0, value))
+
+const injectCrashIfNeeded = async () => {
+  if (!crashNext) return
+  crashNext = false
+  setTimeout(() => {
+    throw new Error('Injected worker crash')
+  }, 0)
+  await new Promise(() => {})
+}
+
 const handlers = {
+  setErrorRate(rate: number) {
+    errorRate = clampRate(rate)
+  },
+  crashNext() {
+    crashNext = true
+  },
   async process(image: ImageData, ctx: TaskContext): Promise<ResizedImage> {
     // Simulate variable resize time (100-500ms)
     const processingTime = 100 + Math.random() * 400
     await simulateWork(processingTime)
+    await injectCrashIfNeeded()
     ctx.throwIfAborted()
 
-    // Simulate occasional errors (5% failure rate)
-    if (Math.random() < 0.05) {
+    // Simulate optional errors when configured.
+    if (errorRate > 0 && Math.random() < errorRate) {
       throw new Error(`Failed to resize ${image.name}: Corrupted image data`)
     }
 

@@ -52,11 +52,24 @@ Notes:
 - `keyOf` derives the cancellation key per call. Returning an empty string
   is treated as “no key”.
 - `timeoutMs` is applied per dispatch and aborts the call.
+- `maxInFlight` defaults to `poolSize` (parallel) or `1` (singleton).
+- `maxQueueDepth` defaults to `maxInFlight * 2` (parallel) or `2` (singleton).
+- `queuePolicy: 'block'` waits at the call site until queue capacity exists.
 - `crashPolicy` controls recovery after worker crashes. Default is
   `restart-fail-in-flight`.
 - `crashMaxRetries` caps consecutive crashes before escalating to `fail-task`
   (default `3`).
 - Restart policies apply a small internal backoff (100ms → 2s) between restarts.
+
+### Queue states (practical meaning)
+
+- **In flight**: work is executing on a worker. It consumes worker CPU and is
+  no longer just “waiting around”.
+- **Pending**: work is accepted but not started. The runtime is holding onto
+  it, so memory use grows with the backlog and end‑to‑end latency increases.
+- **Waiting**: the caller is paused before the runtime accepts the work. This
+  is a signal to reduce upstream concurrency or defer large allocations so you
+  don’t inflate memory while the system is saturated.
 
 ## Task<T>
 

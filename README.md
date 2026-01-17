@@ -17,6 +17,19 @@ backpressure, and cancellation without a pipeline DSL.
 - Worker crash detection with an explicit recovery policy
 - Runtime-scoped observability snapshots and event stream
 
+## Queue states (what they mean for your app)
+
+- **In flight**: work is executing on a worker (active CPU time).
+- **Pending**: accepted but not started. The runtime holds the payload, so memory
+  and latency grow with the backlog.
+- **Waiting**: the caller is paused before the runtime accepts the work. This
+  indicates upstream concurrency is outpacing capacity; apply a limiter or defer
+  large allocations until the system has room.
+- Queues bound accepted work, not payload allocation. If you build large payloads
+  before calling a task, memory can still blow up; keep allocation inside a
+  `parallelLimit` block or inside the worker (e.g., pass a `File`/`Blob` and
+  decode there) to keep memory stable.
+
 ## Core concepts
 
 - **Runtime**: created via `createTaskRuntime()`. Owns the task registry and
@@ -194,9 +207,9 @@ bun run build
 
 See the `examples/` directory for runnable demos:
 
-- `examples/observability-demo/` - Live view of worker pools, queues, and metrics
+- `examples/observability-demo/` - Guided tour of workers, queues, and backpressure
 
-To run the observability demo:
+To run the guided tour:
 
 ```bash
 bun run examples

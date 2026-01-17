@@ -32,6 +32,20 @@ function simulateWork(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+let errorRate = 0
+let crashNext = false
+
+const clampRate = (value: number) => Math.min(1, Math.max(0, value))
+
+const injectCrashIfNeeded = async () => {
+  if (!crashNext) return
+  crashNext = false
+  setTimeout(() => {
+    throw new Error('Injected worker crash')
+  }, 0)
+  await new Promise(() => {})
+}
+
 // Simulated object detection labels
 const OBJECTS = [
   'person',
@@ -47,6 +61,12 @@ const OBJECTS = [
 ]
 
 const handlers = {
+  setErrorRate(rate: number) {
+    errorRate = clampRate(rate)
+  },
+  crashNext() {
+    crashNext = true
+  },
   async process(image: ResizedImage, ctx: TaskContext): Promise<AnalysisResult> {
     // Ensure model is loaded (lazy loading simulation)
     const modelLoadTime = await ensureModelLoaded()
@@ -54,10 +74,11 @@ const handlers = {
     // Simulate ML inference (300-800ms per image)
     const inferenceTime = 300 + Math.random() * 500
     await simulateWork(inferenceTime)
+    await injectCrashIfNeeded()
     ctx.throwIfAborted()
 
-    // Simulate occasional errors (3% failure rate)
-    if (Math.random() < 0.03) {
+    // Simulate optional errors when configured.
+    if (errorRate > 0 && Math.random() < errorRate) {
       throw new Error(`Analysis failed for ${image.name}: Out of memory`)
     }
 
