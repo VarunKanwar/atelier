@@ -1,119 +1,42 @@
 # Observability Design
 
-Atelier exposes observability as three complementary surfaces: current state,
-raw events, and optional performance measures. The goal is to provide reliable
-telemetry without in-library aggregation or hidden overhead.
+Atelier exposes observability through three surfaces: state snapshots, an event
+stream, and optional Performance API measures. The intent is explicitness and
+low overhead: nothing is emitted unless you opt in, and there is no in-library
+aggregation.
 
-## Goals
+## Surfaces and configuration
 
-- No in-library aggregation (p50/p95/etc belongs to consumers).
-- Explicit trace context; no implicit async propagation.
-- State is queryable at any time.
-- Browser-only, zero dependencies.
-- Raw structured events for consumers who want streams.
-- Minimal overhead with clear opt-in and sampling.
+State is queryable at any time via `getRuntimeSnapshot()` or
+`subscribeRuntimeSnapshot()`. The event stream (`subscribeEvents`) is the
+canonical record for metrics, spans, and traces. Performance measures are
+best-effort and intended for profiling and devtools integration.
 
-## Non-goals
+Spans are opt-in via `createTaskRuntime({ observability: { spans } })`. The
+default is `spans: 'auto'`, which enables spans in dev and disables them in
+production. Sampling is trace-level when a trace is present; otherwise it uses
+the span id. Events are emitted only when listeners are registered.
 
-- Distributed tracing across services.
-- Backend export pipeline in the core runtime.
-- Worker-internal timing (main-thread timing only).
-- Parent/child span hierarchies or implicit context propagation.
+## Traces and spans
 
-## Three observability surfaces
-
-1. **State API** (authoritative current state)
-   - `getRuntimeSnapshot()` / `subscribeRuntimeSnapshot()`
-2. **Event stream** (canonical record)
-   - `subscribeEvents()` emits counters, gauges, histograms, spans, traces
-3. **Performance API measures** (best-effort spans/trace timing)
-   - `performance.measure('atelier:span', ...)`
-   - `performance.measure('atelier:trace', ...)`
-
-Recommended usage:
-- Use `subscribeEvents()` as the canonical telemetry stream.
-- Use Performance measures for profiling/devtools only; they can drop entries or
-  omit `detail` depending on browser support.
-
-## Configuration and opt-in
-
-Observability must be explicit to avoid accidental overhead:
-
-- **Spans are opt-in.** Enable via `createTaskRuntime({ observability: { spans } })`.
-- **Events are opt-in by subscription.** If no listeners are registered,
-  no events are emitted.
-- Default `spans: 'auto'` means enable in dev, disable in prod.
-- Sampling is trace-level when a trace is present. Without a trace, sampling
-  uses the span id (root-span behavior).
-
-Dev/prod detection prefers `import.meta.env.DEV`, then falls back to
-`process.env.NODE_ENV !== 'production'` when available. If neither is present,
-`'auto'` behaves as production (spans off).
-
-## Trace model
-
-Tracing is explicit and opt-in:
-
-- `runtime.createTrace(name?) -> TraceContext`
-- `runtime.runWithTrace(name, fn)` creates a trace and calls `trace.end()`
-- `task.with({ trace })` is the only supported way to attach trace context
-
-There is **no implicit propagation** and **no parent/child hierarchy**.
+Tracing is explicit. Create a trace with `runtime.createTrace(name?)` or
+`runtime.runWithTrace(name, fn)`, then attach it to calls with
+`task.with({ trace })`. There is no implicit propagation and no span hierarchy.
 A trace represents a workflow instance; each task call is a span.
 
-`trace.end()` emits:
+A span measures a single task call from dispatch request to completion. It
+tracks attempt counts (requeues), queue wait time, and end status (`ok`,
+`error`, `canceled`). Queue drops end spans immediately with `errorKind: 'queue'`.
+`WorkerCrashedError` is classified as `errorKind: 'crash'`, and aborts are
+classified as `errorKind: 'abort'`.
 
-- a trace measure (`atelier:trace`) when spans are enabled and the trace is
-  sampled, and
-- a `TraceEvent` under the same gating (spans enabled + sampled).
+## Events, metrics, and measures
 
-Note: cancellation keys (`keyOf(...)`) are not trace identifiers. You may name a
-trace using a key, but trace ids should remain unique per workflow run.
+The event stream delivers counters, gauges, histograms, spans, and traces. It
+is synchronous and best-effort; listener errors are swallowed, so keep handlers
+fast. Spans and traces are emitted only when spans are enabled and sampled.
 
-## Span model
-
-A span represents one task call from dispatch request to completion.
-Spans start before enqueue so rejected/dropped calls are captured.
-
-Key details:
-
-- `spanId` is stable per call (reuses `callId`).
-- `attemptCount` increments each time a call is dispatched.
-- `queueWaitMs` is cumulative across attempts; `queueWaitLastMs` is the last
-  attempt's wait time.
-- End status: `ok`, `error`, or `canceled`.
-
-Queue rejections and drops end spans immediately with `errorKind: 'queue'` and
-`attemptCount = 0`.
-
-Error classification:
-
-- `AbortError` -> `canceled` / `abort`
-- `WorkerCrashedError` -> `error` / `crash`
-- queue drops/rejects -> `error` / `queue`
-- other errors -> `error` / `exception`
-
-## Event stream
-
-Events are delivered synchronously and best-effort; consumer errors are
-swallowed. Keep handlers fast and offload heavy work.
-
-The stream emits:
-
-- counters
-- gauges
-- histograms
-- span events (mirroring span measures)
-- trace events
-
-Span and trace events are emitted only when spans are enabled and the trace/span
-is sampled. Metric events are independent of span sampling.
-
-The event stream is the canonical record, even if Performance entries drop.
-
-## Metrics
-
-Initial metric set:
+Metrics emitted today:
 
 Counters:
 - `task.dispatch.total`
@@ -136,39 +59,7 @@ Histograms:
 - `task.duration_ms`
 - `queue.wait_ms`
 
-Gauges are emitted on queue state changes. Histograms and counters are emitted
-at dispatch/complete/cancel/reject boundaries.
-
-### Metric attributes
-
-Required when applicable:
-
-- `task.id` (all task-scoped metrics)
-- `task.type` (all task-scoped metrics)
-- `task.name` (optional)
-- `worker.index` (worker-scoped metrics)
-- `queue.policy` (queue-scoped metrics)
-- `queue.max_in_flight`, `queue.max_depth` (optional)
-
-## Performance measures
-
-When spans are enabled and sampled:
-
-- Each task call emits `performance.measure('atelier:span', ...)`.
-- `trace.end()` emits `performance.measure('atelier:trace', ...)`.
-
-These measures are best-effort. Browsers may drop entries or omit `detail`.
-Use `PerformanceObserver` for profiling and DevTools integration, and rely on
-`subscribeEvents()` for reliable data.
-
-## Why no built-in OpenTelemetry dependency
-
-We align with OTel concepts (trace, span, status, attributes) but intentionally
-avoid a core OTel dependency:
-
-- Browser OTel is experimental and a moving target.
-- Context propagation in the browser often relies on Zone.js.
-- Pulling in OTel packages increases bundle size and complexity for all users.
-
-The event stream is designed so users can build adapters or exporters without
-bundling OTel into the core runtime.
+When spans are enabled and sampled, each call also emits a
+`performance.measure('atelier:span', ...)`, and `trace.end()` emits
+`performance.measure('atelier:trace', ...)`. These measures are best-effort and
+may be dropped or have missing `detail` in some browsers.

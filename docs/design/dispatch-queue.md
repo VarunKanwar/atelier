@@ -1,94 +1,44 @@
 # Dispatch Queue
 
-`DispatchQueue` provides shared admission control and queue semantics for both
-executors (`WorkerPool` and `SingletonWorker`). It bounds accepted work, keeps
-worker message queues predictable, and exposes clear state for observability.
+`DispatchQueue` is the admission controller used by both executors. It bounds
+accepted work, keeps worker message queues predictable, and provides clear state
+for observability. It does not provide pipeline-level scheduling, and it cannot
+prevent memory growth if large payloads are allocated before admission.
 
-## Goals
+## Limits and policies
 
-- Bound accepted work per task with explicit policies.
-- Keep worker message queues bounded and observable.
-- Preserve crash recovery and cancellation semantics.
+The queue enforces two limits: `maxInFlight` (dispatched calls) and
+`maxQueueDepth` (accepted but not yet dispatched). When `maxQueueDepth` is
+reached, a policy determines what happens next:
 
-## Non-goals
-
-- Pipeline-level backpressure across multiple tasks.
-- Preventing memory growth when large payloads are allocated before admission.
-
-## Limits
-
-- `maxInFlight`: maximum number of calls dispatched to workers.
-- `maxQueueDepth`: maximum number of pending calls waiting to dispatch.
-
-## Queue policies
-
-When `maxQueueDepth` is reached:
-
-- `block`: wait at the call site for capacity (default).
+- `block`: wait at the call site until capacity exists.
 - `reject`: reject immediately.
 - `drop-latest`: reject the incoming entry.
-- `drop-oldest`: evict the oldest pending entry, accept the new one.
+- `drop-oldest`: evict the oldest pending entry and accept the new one.
 
-## Queue states
+Under the `block` policy, callers wait in FIFO order. When a pending entry
+leaves the queue (dispatch, cancel, drop), a permit is released to the next
+waiter. Waiting callers hold only a Promise and an optional AbortSignal listener;
+there is no overflow queue.
 
-Each call is in one of three states:
+## State model
 
-- `waiting`: the caller is paused before the runtime accepts the work.
-- `pending`: accepted and queued, waiting to dispatch.
-- `in-flight`: dispatched to a worker.
+Each call moves through three phases: `waiting` (call-site paused before
+admission), `pending` (accepted but not dispatched), and `in-flight` (running
+on a worker). Queue wait time is measured from call time to dispatch, including
+any waiting.
 
-## Admission (`block` policy)
+## Cancellation and crash recovery
 
-`block` implements true call-site waiting:
-
-1) If `pending.length >= maxQueueDepth`, wait for a capacity permit (FIFO).
-2) Once a permit is acquired, enqueue the entry.
-3) When a pending entry leaves the queue (dispatch, cancel, drop), release a
-   permit to the next waiter.
-
-There is no overflow queue. Waiting callers hold only a Promise and (optionally)
-an AbortSignal listener.
-
-## Load shedding (`reject` / `drop-*`)
-
-No waiting occurs for load-shedding policies:
-
-- `reject`: reject immediately with `QueueDropError`.
-- `drop-latest`: reject the incoming entry.
-- `drop-oldest`: evict the oldest pending entry, reject it, and enqueue the new
-  entry.
-
-## Cancellation phases
-
-Cancellation can occur in three phases:
-
-- `waiting`: caller aborted before enqueue.
-- `queued`: pending entry removed before dispatch.
-- `in-flight`: dispatched entry canceled via `__cancel(callId)`.
-
-## Crash recovery and requeue
-
-When a worker crashes with a requeue policy, in-flight entries are moved back to
-pending and the attempt counter is incremented. Requeued entries bypass
-admission to avoid deadlocks and are inserted at the front of the queue. Any
-completion from the terminated worker is ignored.
+Cancellation can occur while waiting, queued, or in-flight. In-flight
+cancellation uses worker `__cancel(callId)` and relies on cooperative handlers.
+When workers crash with a requeue policy, in-flight entries are moved back to
+pending, their attempt counters are incremented, and any stale completions from
+terminated workers are ignored.
 
 ## Observability hooks
 
-`DispatchQueue` emits two classes of signals:
-
-- **payload-aware hooks** (`onDispatch`, `onReject`, `onCancel`) for counters,
-  histograms, and span classification.
-- **state-only hook** (`onStateChange`) for queue gauges on every state change.
-
-Queue wait time is measured from call time (including any waiting) to dispatch,
-using the same `now()` utility as span timing.
-
-## Practical meaning for app developers
-
-- **In flight**: work is running on a worker (active CPU time).
-- **Pending**: accepted but not started. The runtime holds the payload, so
-  memory use and end-to-end latency grow with backlog size.
-- **Waiting**: the caller is paused before the runtime accepts the work. Use
-  this as a signal to limit upstream concurrency or defer large allocations
-  until capacity is available.
+`DispatchQueue` emits payload-aware hooks for counters and spans
+(`onDispatch`, `onReject`, `onCancel`) and a state hook (`onStateChange`) for
+queue gauges. Executing code should keep these handlers fast; they run
+synchronously on the main thread.
