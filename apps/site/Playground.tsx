@@ -13,11 +13,10 @@ import {
   Tabs,
   Text,
 } from '@chakra-ui/react'
+import type { CrashPolicy, QueuePolicy } from '@varunkanwar/atelier'
+import { createTaskRuntime } from '@varunkanwar/atelier'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
-
-import { createTaskRuntime } from '../../src'
-import type { CrashPolicy, QueuePolicy } from '../../src/types'
 import type { FlowGraph } from './harness/flow-types'
 import RuntimeSnapshotPanel from './RuntimeSnapshotPanel'
 import {

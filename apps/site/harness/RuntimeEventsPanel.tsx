@@ -1,6 +1,6 @@
 import { Badge, Box, HStack, SimpleGrid, Stack, Text } from '@chakra-ui/react'
 
-import type { TaskRuntime } from '../../../src'
+import type { TaskRuntime } from '@varunkanwar/atelier'
 import { useRuntimeEvents } from '../useRuntimeEvents'
 
 export type RuntimeEventsPanelProps = {

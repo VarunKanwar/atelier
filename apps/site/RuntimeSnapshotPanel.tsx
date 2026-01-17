@@ -9,8 +9,8 @@ import {
   Tabs,
   Text,
 } from '@chakra-ui/react'
+import type { RuntimeTaskSnapshot, TaskRuntime } from '@varunkanwar/atelier'
 import { useMemo } from 'react'
-import type { RuntimeTaskSnapshot, TaskRuntime } from '../../src'
 import type { FlowGraph } from './harness/flow-types'
 import ScenarioFlowCanvas from './harness/ScenarioFlowCanvas'
 import { useRuntimeSnapshot } from './useRuntimeSnapshot'

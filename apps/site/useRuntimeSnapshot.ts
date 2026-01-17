@@ -1,6 +1,9 @@
+import type {
+  RuntimeSnapshot,
+  RuntimeSnapshotSubscriptionOptions,
+  TaskRuntime,
+} from '@varunkanwar/atelier'
 import { useEffect, useMemo, useState } from 'react'
-
-import type { RuntimeSnapshot, RuntimeSnapshotSubscriptionOptions, TaskRuntime } from '../../src'
 
 export type UseRuntimeSnapshotOptions = RuntimeSnapshotSubscriptionOptions & {
   enabled?: boolean
