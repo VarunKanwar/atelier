@@ -22,9 +22,9 @@ backpressure, and cancellation without a pipeline DSL.
 - **In flight**: work is executing on a worker (active CPU time).
 - **Pending**: accepted but not started. The runtime holds the payload, so memory
   and latency grow with the backlog.
-- **Waiting**: the caller is paused before the runtime accepts the work. This is
-  a signal to reduce upstream concurrency or defer large allocations until the
-  system has capacity.
+- **Waiting**: the caller is paused before the runtime accepts the work. This
+  indicates upstream concurrency is outpacing capacity; apply a limiter or defer
+  large allocations until the system has room.
 - Queues bound accepted work, not payload allocation. If you build large payloads
   before calling a task, memory can still blow up; keep allocation inside a
   `parallelLimit` block or inside the worker (e.g., pass a `File`/`Blob` and
