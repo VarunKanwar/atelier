@@ -131,7 +131,7 @@ const unsubscribe = runtime.subscribeEvents(event => {
 
 - Design notes: `docs/design/README.md`
 - Observability model: `docs/design/observability.md`
-- API reference (generated via TypeDoc and published with the site)
+- API reference (generated via TypeDoc and published at `/docs/` on the site)
 - Testing: `docs/testing.md`
 - Public landing page: `apps/site/`
 

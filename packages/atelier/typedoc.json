@@ -1,7 +1,8 @@
 {
   "entryPoints": ["src/index.ts"],
   "tsconfig": "./tsconfig.json",
-  "out": "../../apps/site/public/api",
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "../../apps/site/generated/docs",
   "readme": "none",
   "excludePrivate": true,
   "excludeProtected": true,
@@ -9,5 +10,9 @@
   "excludeExternals": true,
   "cleanOutputDir": true,
   "sort": ["source-order"],
-  "gitRevision": "main"
+  "gitRevision": "main",
+  "hideBreadcrumbs": true,
+  "hidePageHeader": true,
+  "hidePageTitle": true,
+  "flattenOutputFiles": true
 }

@@ -1002,7 +1002,7 @@ const Playground = () => {
   )
 
   return (
-    <Box minH="100vh" bg="gray.50" px={{ base: 4, lg: 6 }} py={5}>
+    <Box minH="100vh" bgGradient="linear(to-b, gray.50, gray.100)" px={{ base: 4, lg: 6 }} py={5}>
       <Box maxW="1600px" mx="auto">
         <Stack gap={5}>
           {tabs}

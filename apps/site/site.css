@@ -1,0 +1,18 @@
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  background: #f7fafc;
+  color: #1a202c;
+}
+
+a {
+  color: inherit;
+}
