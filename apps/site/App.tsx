@@ -34,9 +34,9 @@ const App = () => {
     <BrowserRouter basename={normalizedBase}>
       <Box minH="100vh">
         <Box bg="white" borderBottomWidth="1px" borderColor="gray.200">
-          <Box maxW="1200px" mx="auto" px={{ base: 5, md: 8 }} py={3}>
+          <Box maxW="var(--content-max-width)" mx="auto" px={{ base: 5, md: 8 }} py={3}>
             <HStack justify="space-between" align="center" flexWrap="wrap" gap={4}>
-              <Text fontWeight="semibold" fontSize="md">
+              <Text fontWeight="bold" fontSize="lg" letterSpacing="-0.01em">
                 Atelier
               </Text>
               <HStack gap={5}>
