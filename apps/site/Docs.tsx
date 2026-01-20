@@ -54,7 +54,10 @@ const Docs = () => {
   const indexContent = docs.get('README.md') ?? ''
   const sections = useMemo(() => {
     if (!indexContent) return []
-    return [{ title: 'Index', items: [{ title: 'Overview', path: 'README.md' }] }, ...parseIndex(indexContent)]
+    return [
+      { title: 'Index', items: [{ title: 'Overview', path: 'README.md' }] },
+      ...parseIndex(indexContent),
+    ]
   }, [indexContent])
 
   const defaultDoc = 'README.md'
@@ -83,9 +86,16 @@ const Docs = () => {
                   </Text>
                   <Stack gap={1} color="gray.600">
                     {section.items.map(item => (
-                      <NavLink key={item.path} to={`/docs/${encodeURIComponent(item.path)}`} style={{ textDecoration: 'none' }}>
+                      <NavLink
+                        key={item.path}
+                        to={`/docs/${encodeURIComponent(item.path)}`}
+                        style={{ textDecoration: 'none' }}
+                      >
                         {({ isActive }) => (
-                          <Link fontWeight={isActive ? 'semibold' : 'normal'} color={isActive ? 'gray.900' : 'gray.600'}>
+                          <Link
+                            fontWeight={isActive ? 'semibold' : 'normal'}
+                            color={isActive ? 'gray.900' : 'gray.600'}
+                          >
                             {item.title}
                           </Link>
                         )}

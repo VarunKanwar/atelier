@@ -33,3 +33,12 @@ body {
 a {
   color: inherit;
 }
+
+.home-codeblock pre {
+  margin: 0;
+  padding: 0;
+}
+
+.home-codeblock code {
+  font-family: var(--font-mono);
+}

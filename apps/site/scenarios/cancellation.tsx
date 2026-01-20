@@ -151,7 +151,7 @@ const CancellationScenario = (_props: ScenarioComponentProps) => {
             size="sm"
             onClick={handleRun}
             disabled={runStatus === 'running'}
-            colorScheme="blue"
+            colorPalette="blue"
           >
             {runStatus === 'running' ? 'Running…' : 'Run'}
           </Button>
