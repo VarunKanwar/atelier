@@ -3,7 +3,7 @@
 This file captures repo-specific instructions and context for coding agents.
 Keep it concise, practical, and aligned with how the library is structured.
 
-## Project Overview
+## What this repo is
 
 Atelier is a browser-only task runtime for Web Worker orchestration. It provides:
 - Task runtime (`createTaskRuntime`) with per-task executors.
@@ -11,60 +11,81 @@ Atelier is a browser-only task runtime for Web Worker orchestration. It provides
 - Backpressure via `DispatchQueue`.
 - Keyed cancellation via `AbortTaskController`.
 - Crash recovery policies.
-- Observability docs (see `docs/observability-redesign*.md`).
+- Runtime-scoped observability (state + event stream + optional measures).
 
-## Key Files
+## How the repo is laid out (avoid brittle paths)
 
-- Runtime: `packages/atelier/src/runtime.ts`
-- Task definition/proxy: `packages/atelier/src/define-task.ts`
-- Executors: `packages/atelier/src/worker-pool.ts`, `packages/atelier/src/singleton-worker.ts`
-- Queue: `packages/atelier/src/dispatch-queue.ts`
-- Worker harness: `packages/atelier/src/task-worker.ts`
-- Types: `packages/atelier/src/types.ts`
-- Tests: `packages/atelier/tests/`
-- Docs: `docs/`
+- This is a workspace repo. Use the root `package.json` workspaces list to find packages.
+- The library package is the one whose `package.json` name is `@varunkanwar/atelier`.
+  - Source lives in that package’s `src/`.
+  - Tests live alongside in `tests/`.
+  - Build output is `dist/`.
+- Apps live in workspace `apps/`.
+- Docs live under `docs/`; design notes live under `docs/design/` (search by title).
 
-## Code Style & Tooling
+## Core modules (search by symbol name)
 
-- TypeScript, ESM (`"type": "module"` in `package.json`).
-- Formatting/lint: Biome (`bun run check` / `bun run check:fix`).
-- Tests: Vitest (`bun run test`).
-- Build: `bun run build` (tsc build config in `packages/atelier/tsconfig.build.json`).
+- `createTaskRuntime`: runtime registry, observability wiring, trace helpers.
+- `defineTask` / `createDefineTask`: task proxy creation, dispatch envelope, `task.with`.
+- `WorkerPool` / `SingletonWorker`: executors, worker lifecycle, crash policy handling.
+- `DispatchQueue`: admission control, queue policies, wait/queue/in-flight states.
+- `createTaskWorker`: worker harness providing `__dispatch` / `__cancel`.
+- `parallelLimit` / `yieldAsCompleted`: pipeline-level flow control.
+- `AbortTaskController`: keyed cancellation store.
+- `WorkerCrashedError`: crash semantics + observability classification.
 
-Prefer small, well-scoped changes and keep types precise.
+## Dispatch flow (main thread → worker)
 
-## Testing Expectations
+1) `defineTask` builds an executor and returns a Proxy.
+2) Proxy method call → `executor.dispatch(...)`.
+3) `DispatchQueue` enforces backpressure (waiting → pending → in-flight).
+4) Executor calls worker `__dispatch` (Comlink), with transferables applied.
+5) Completion resolves/rejects the call; requeues bump attempt counters so stale
+   completions are ignored.
 
-- For behavior changes in executors/queue/cancellation, add or update tests.
-- Integration tests live under `packages/atelier/tests/integration`.
-- Unit tests live under `packages/atelier/tests/unit`.
-- Worker crash/cancellation tests use `packages/atelier/tests/helpers/fake-worker.ts`.
+## Backpressure & queue semantics
 
-## Architectural Notes
+- Queue states: `waiting` (call-site paused), `pending` (accepted, not started),
+  `in-flight` (running on worker).
+- Policies: `block` waits at the call site; `reject` / `drop-*` load shed.
+- `block` uses permits; waiting callers hold only a Promise + optional AbortSignal.
+- Queue wait time includes waiting + pending time.
 
-- **Dispatch flow**: task calls are wrapped by `defineTask`, queued by
-  `DispatchQueue`, then executed via `__dispatch` on the worker harness.
-- **Transferables**: automatic zero-copy transfer is implemented in
-  `WorkerPool`/`SingletonWorker` using the `transferables` library and Comlink.
-- **Crash recovery**: handled in executors with backoff and policy-based
-  behavior; ensure changes keep `WorkerCrashedError` semantics consistent.
-- **Cancellation**: keyed cancellation (`AbortTaskController`) is runtime-scoped.
-  Ensure cancellation phases (waiting/queued/in-flight) remain consistent.
+## Cancellation & timeouts
 
-## Observability Work
+- Keyed cancellation uses `AbortTaskController` + `keyOf` on tasks or `keyOf` in
+  `parallelLimit`.
+- Phases: `waiting`, `queued`, `in-flight` (in-flight uses worker `__cancel`).
+- `timeoutMs` creates an AbortSignal for a dispatch; treat it like cancellation.
 
-There are two spec paths:
-- `docs/observability-redesign.md` (Performance API + state + events)
-- `docs/observability-redesign-with-otel.md` (OTel-first)
+## Crash recovery
 
-Do not mix the two. If implementing one path, follow its spec and update tests.
-Avoid in-library aggregation (p50/p95) unless explicitly requested.
+- Crash policies control whether in-flight work fails or requeues after a crash.
+- Requeued entries bypass admission to avoid deadlocks; attempt counts increment.
+- `WorkerCrashedError` is a first-class error kind in observability.
 
-## Common Pitfalls
+## Observability
 
-- Worker APIs rely on `__dispatch` and `__cancel` from the harness.
-- `task.with(...)` is reserved for dispatch options; do not add conflicting
-  properties to task proxies.
-- Queue policies (`block`, `reject`, `drop-latest`, `drop-oldest`) have subtle
-  semantics; update tests if changing behavior.
-- Avoid relying on Node-only APIs; this is browser-first.
+- State snapshots (`getRuntimeSnapshot`) are authoritative for current state.
+- Event stream (`subscribeEvents`) is canonical for metrics/spans/traces.
+- Spans are opt-in; events are emitted only when listeners exist.
+- Avoid in-library aggregation (p50/p95/etc).
+
+## Transferables
+
+- Default is automatic zero-copy transfer; override with `transfer` and
+  `transferResult`.
+- Transfers move ownership; buffers are detached on the sender.
+
+## Tests
+
+- Unit, integration, and perf tests live under the library package `tests/`.
+- Use the fake-worker helpers for crash/cancel scenarios.
+- Update tests for any executor/queue/cancellation semantics change.
+
+## Common pitfalls
+
+- `task.with(...)` is reserved for dispatch options; don’t add conflicting props.
+- Worker APIs rely on `__dispatch` / `__cancel` from the harness.
+- Queue policy semantics are subtle; keep states and hooks consistent.
+- Avoid Node-only APIs; the runtime is browser-first.

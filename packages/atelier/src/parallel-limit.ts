@@ -38,20 +38,20 @@ export type ParallelLimitResult<R, T = unknown> =
   | { status: 'fulfilled'; value: R; item: T }
   | { status: 'rejected'; error: unknown; item: T }
 
-export type ParallelLimitCancellationOptions<T> = {
+export type ParallelLimitOptions<T> = {
   signal?: AbortSignal
   abortTaskController?: AbortTaskController
   keyOf?: (item: T) => string
-}
-
-export type ParallelLimitOptions<T> = ParallelLimitCancellationOptions<T> & {
   // Default is fail-fast; set to 'continue' to skip failed items.
   errorPolicy?: ParallelLimitErrorPolicy
   // Hook for logging/metrics without altering control flow.
   onError?: (error: unknown, item: T) => void
 }
 
-export type ParallelLimitSettledOptions<T> = ParallelLimitCancellationOptions<T> & {
+export type ParallelLimitSettledOptions<T> = {
+  signal?: AbortSignal
+  abortTaskController?: AbortTaskController
+  keyOf?: (item: T) => string
   // Yield {status, value|error, item} for each item and never throw.
   returnSettled: true
   onError?: (error: unknown, item: T) => void

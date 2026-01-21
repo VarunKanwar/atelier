@@ -147,7 +147,7 @@ const ConcurrencyScenario = (_props: ScenarioComponentProps) => {
           size="sm"
           onClick={handleRun}
           disabled={runStatus === 'running'}
-          colorScheme="blue"
+          colorPalette="blue"
           w="full"
         >
           {runStatus === 'running' ? 'Running…' : 'Run'}

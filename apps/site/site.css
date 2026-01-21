@@ -1,0 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --font-sans: "Manrope", "IBM Plex Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+  --page-bg: #f6f7fb;
+  --surface-muted: #f1f3f7;
+  --border-subtle: #e1e6ef;
+  --accent: #2f6bff;
+  --accent-strong: #1f4fd6;
+  --content-max-width: 1280px;
+  --grain: repeating-linear-gradient(
+    120deg,
+    rgba(15, 23, 42, 0.04) 0px,
+    rgba(15, 23, 42, 0.04) 1px,
+    transparent 1px,
+    transparent 5px
+  );
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--page-bg);
+  color: #111827;
+}
+
+a {
+  color: inherit;
+}
+
+.home-codeblock pre {
+  margin: 0;
+  padding: 0;
+}
+
+.home-codeblock code {
+  font-family: var(--font-mono);
+}

@@ -17,6 +17,7 @@ export {
   yieldAsCompleted,
 } from './parallel-limit'
 export type {
+  RuntimeConfig,
   RuntimeSnapshot,
   RuntimeSnapshotSubscriptionOptions,
   RuntimeTaskSnapshot,
@@ -31,6 +32,7 @@ export type {
   InitMode,
   MetricEvent,
   ObservabilityConfig,
+  QueuePolicy,
   RuntimeEvent,
   SpanErrorKind,
   SpanEvent,

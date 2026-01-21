@@ -60,7 +60,7 @@ type RegisteredTask = {
   executor: TaskExecutor
 }
 
-type RuntimeConfig = {
+export type RuntimeConfig = {
   observability?: ObservabilityConfig
 }
 

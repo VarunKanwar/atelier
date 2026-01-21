@@ -28,6 +28,7 @@
     "format:fix": "biome format --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
+    "docs:api": "typedoc --options typedoc.json",
     "prepublishOnly": "bun run check && bun run typecheck && bun run test && bun run build"
   },
   "keywords": [

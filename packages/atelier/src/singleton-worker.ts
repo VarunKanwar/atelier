@@ -66,6 +66,7 @@ type SpanRecord = {
  * - Constructed via `runtime.defineTask({ type: 'singleton', ... })`.
  * - Configure limits with `maxInFlight` and `maxQueueDepth`.
  */
+/** @internal */
 // biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped singleton workers
 export class SingletonWorker<T = any> implements TaskExecutor {
   private worker: Remote<T> | null = null
