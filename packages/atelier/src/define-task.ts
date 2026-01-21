@@ -17,7 +17,9 @@ import { WorkerPool } from './worker-pool'
 
 export type Task<T> = Remote<T> & {
   // Add internal properties for observability
+  /** @internal */
   __executor: TaskExecutor
+  /** @internal */
   __config: TaskConfig
   with: (options: TaskDispatchOptions) => Task<T>
   getState(): ReturnType<TaskExecutor['getState']>

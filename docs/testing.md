@@ -1,18 +1,10 @@
 # Atelier Testing
 
-This repo uses Vitest for Atelier tests. Tests live under `tests/`.
-
-## Worker harness
-
-Crash-recovery tests use a minimal `FakeWorker` shim (`tests/helpers/fake-worker.ts`).
-It emulates the parts of the Worker interface that the runtime relies on:
-
-- `addEventListener` / `removeEventListener`
-- `terminate`
-- explicit `error` / `messageerror` emission
-
-`comlink.wrap` is mocked in these tests to return the worker instance directly,
-so the fake worker can expose `__dispatch` without a real Worker thread.
-
-This keeps tests deterministic while still exercising the recovery logic paths
-that depend on worker events.
+This repo uses Vitest for the Atelier tests, which live under the library
+package `tests/` directory. Crash-recovery tests use a minimal `FakeWorker`
+shim to emulate the Worker surface that the runtime depends on
+(`addEventListener`, `removeEventListener`, `terminate`, and explicit `error` /
+`messageerror` emission). In those tests, `comlink.wrap` is mocked to return the
+worker instance directly so the fake worker can expose `__dispatch` without a
+real Worker thread. This keeps tests deterministic while still exercising the
+recovery logic paths tied to worker events.

@@ -64,6 +64,7 @@ type SpanRecord = {
   sampled: boolean
 }
 
+/** @internal */
 // biome-ignore lint/suspicious/noExplicitAny: Generic default allows untyped worker pools
 export class WorkerPool<T = any> implements TaskExecutor {
   private workers: (Remote<T> | null)[] = []

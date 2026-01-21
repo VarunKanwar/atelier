@@ -23,6 +23,7 @@
 import { now as getNow } from './observability-utils'
 import type { QueuePolicy, TaskDispatchOptions } from './types'
 
+/** @internal */
 export type DispatchQueueState = {
   inFlight: number
   pending: number
@@ -34,6 +35,7 @@ export type DispatchQueueState = {
   disposed: boolean
 }
 
+/** @internal */
 export type DispatchQueueHooks<T> = {
   onQueued?: (payload: T, pendingDepth: number, maxQueueDepth: number) => void
   onDispatch?: (payload: T, queueWaitMs: number) => void
@@ -64,6 +66,7 @@ type CapacityWaiter<T> = {
   active: boolean
 }
 
+/** @internal */
 export class DispatchQueue<T> {
   private readonly pending: QueueEntry<T>[] = []
   private readonly capacityWaiters: CapacityWaiter<T>[] = []

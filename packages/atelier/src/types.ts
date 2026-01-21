@@ -71,6 +71,7 @@ export interface WorkerState {
   queueDepthByWorker?: number[]
 }
 
+/** @internal */
 export interface TaskExecutor {
   // biome-ignore lint/suspicious/noExplicitAny: Generic task dispatch returns arbitrary worker method results
   dispatch(method: string, args: unknown[], options?: TaskDispatchOptions): Promise<any>
@@ -144,6 +145,7 @@ export type ObservabilityConfig = {
 }
 
 /** Internal observability helpers passed to executors. */
+/** @internal */
 export type ObservabilityContext = {
   spansEnabled: boolean
   sampleRate: number

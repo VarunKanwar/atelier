@@ -1,6 +1,7 @@
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react'
 import { createRoot } from 'react-dom/client'
 import '@xyflow/react/dist/style.css'
+import './site.css'
 
 import App from './App'
 
