@@ -135,6 +135,19 @@ const unsubscribe = runtime.subscribeEvents(event => {
 - Testing: `docs/testing.md`
 - Public landing page: `apps/site/`
 
+## Site deployment (GitHub Pages)
+
+The site is a SPA. For GitHub Pages, build with a base path that matches the
+repo name and deploy the `apps/site/dist` output.
+
+```bash
+# Example for https://<user>.github.io/atelier/
+PUBLIC_BASE_PATH=/atelier/ bun run --cwd apps/site build
+```
+
+If you deploy to a custom domain or a user/org root page, use `/` as the base
+path.
+
 ## Development
 
 ```bash

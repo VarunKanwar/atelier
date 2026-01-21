@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atelier</title>
+    <script>
+      ;(function () {
+        var base = '%BASE_URL%'
+        var basePath = base.endsWith('/') ? base.slice(0, -1) : base
+        var l = window.location
+        var path = l.pathname
+        if (basePath && path.indexOf(basePath) === 0) {
+          path = path.slice(basePath.length)
+        }
+        path = path.replace(/^\/+/, '').replace(/&/g, '~and~')
+        var search = l.search ? l.search.replace(/&/g, '~and~') : ''
+        var target = l.origin + basePath + '/?/' + path + search + l.hash
+        l.replace(target)
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>
