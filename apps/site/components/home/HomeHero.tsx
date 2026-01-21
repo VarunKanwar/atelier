@@ -90,16 +90,18 @@ const HomeHero = ({ docsHref, exploreHref, githubHref }: HomeHeroProps) => {
       <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 8, lg: 16 }} alignItems="start">
         <Stack gap={6}>
           <Text
-            fontSize={{ base: '4xl', md: '5xl', lg: '6xl' }}
+            fontSize={{ base: '3xl', md: '4xl', lg: '6xl' }}
             fontWeight="semibold"
             letterSpacing="-0.03em"
             lineHeight="1.1"
             color="gray.900"
           >
-            Task Runtime for Web Workers
+            The Task Runtime for Web Workers
+            {/* The missing runtime for browser compute */}
           </Text>
           <Text fontSize={{ base: 'lg', md: 'xl' }} color="gray.600" maxW="480px">
-            Backpressure, cancellation, crash recovery, and observability for browser workloads.
+            Backpressure, cancellation, crash recovery, and observability for your browser-based workloads.
+            {/* Handles backpressure, cancellation, crash recovery, and observability so you don't have to. */}
           </Text>
           <HStack gap={3} flexWrap="wrap">
             <Button asChild bg="gray.900" color="white" _hover={{ bg: 'gray.800' }}>

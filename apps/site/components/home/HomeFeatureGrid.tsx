@@ -237,12 +237,12 @@ const HomeFeatureGrid = () => {
           <FeatureCell>
             <Stack gap={4}>
               <Stack gap={1}>
-                <Text fontSize="xl" fontWeight="semibold" color="gray.900">
-                  Define and Dispatch
-                </Text>
-                <Text fontSize="sm" color="gray.600">
-                  Pool or singleton executors. One worker, multiple handlers.
-                </Text>
+                  <Text fontSize="xl" fontWeight="semibold" color="gray.900">
+                    Define and Dispatch
+                  </Text>
+                  <Text fontSize="sm" color="gray.600">
+                    Define tasks once and call them like local methods.
+                  </Text>
               </Stack>
               <Box pt={2}>
                 <CodeTabs />
@@ -265,7 +265,7 @@ const HomeFeatureGrid = () => {
                     Predictable Backpressure
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Queue policies control what happens when workers are busy.
+                    Decide whether to block, reject, or shed load when saturated.
                   </Text>
                 </Stack>
                 <Box pt={2}>
@@ -280,7 +280,7 @@ const HomeFeatureGrid = () => {
                     Keyed Cancellation
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Abort queued and in-flight work by key. Timeouts included.
+                    Cancel whole job groups across queued and in-flight work.
                   </Text>
                 </Stack>
                 <Box pt={2}>
@@ -302,7 +302,7 @@ const HomeFeatureGrid = () => {
                     Crash Recovery
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Workers crash. Choose whether in-flight work requeues or fails.
+                    Choose whether in-flight work requeues or fails on crash.
                   </Text>
                 </Stack>
                 <Box pt={2}>
@@ -317,7 +317,7 @@ const HomeFeatureGrid = () => {
                     Runtime Observability
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Snapshots and event streams. No external dependencies.
+                    Snapshots and event streams for metrics and traces.
                   </Text>
                 </Stack>
                 <Box pt={2}>
