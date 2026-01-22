@@ -1,6 +1,19 @@
 import { Box, SimpleGrid, Stack, Tabs, Text } from '@chakra-ui/react'
+import { createBundledHighlighter, createSingletonShorthands } from 'shiki/core'
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { useEffect, useState } from 'react'
-import { codeToHtml } from 'shiki'
+
+const createHighlighter = createBundledHighlighter({
+  langs: {
+    typescript: () => import('shiki/langs/typescript'),
+  },
+  themes: {
+    'github-light': () => import('shiki/themes/github-light'),
+  },
+  engine: () => createJavaScriptRegexEngine(),
+})
+
+const { codeToHtml } = createSingletonShorthands(createHighlighter)
 
 const codeFiles = {
   main: `import { createTaskRuntime } from '@varunkanwar/atelier'
