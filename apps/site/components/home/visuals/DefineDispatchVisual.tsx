@@ -1,115 +1,85 @@
-import { Box, Text } from '@chakra-ui/react'
+import { Box } from '@chakra-ui/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePipelineSimulation, type PipelineItem } from './hooks/usePipelineSimulation'
 
 // --- CONSTANTS ---
 const STROKE_WIDTH = 1.5
-const PIPE_COLOR = 'rgba(255, 255, 255, 0.1)' // Very subtle pipe
-// Luminous Palette
+const PIPE_COLOR = 'rgba(255, 255, 255, 0.1)'
+// Colors
 const COLOR_START = '#ffffff'
-const COLOR_COOL_START = '#22d3ee' // Cyan-400
-const COLOR_COOL_END = '#818cf8'   // Indigo-400
-const COLOR_WARM_START = '#fbbf24' // Amber-400
-const COLOR_WARM_END = '#ef4444'   // Red-500
-const COLOR_DONE = '#ffffff'       // White again
+const COLOR_COOL_START = '#22d3ee'
+const COLOR_COOL_END = '#818cf8'
+const COLOR_WARM_START = '#fbbf24'
+const COLOR_WARM_END = '#ef4444'
 
 const NODES = {
-  start: { x: 50, y: 150 },
-  preprocess: { x: 130, y: 150 },
-  split: { x: 170, y: 150 },
-  // Top Lane (Thumbnails)
-  thumbStart: { x: 210, y: 80 },
-  thumbEnd: { x: 310, y: 80 },
-  // Bottom Lane (Inference)
-  inferStart: { x: 210, y: 220 },
-  inferEnd: { x: 310, y: 220 },
+  start: { x: 40, y: 150 },
+  preprocess: { x: 120, y: 150 },
+  split: { x: 160, y: 150 },
+  // Top Lane
+  thumbStart: { x: 200, y: 80 },
+  thumbEnd: { x: 300, y: 80 },
+  // Bottom Lane
+  inferStart: { x: 200, y: 220 },
+  inferEnd: { x: 300, y: 220 },
   // Join
-  join: { x: 350, y: 150 },
-  end: { x: 390, y: 150 },
+  join: { x: 340, y: 150 },
+  end: { x: 380, y: 150 },
 }
 
-// SVG Paths
-const PIPES_D = [
-  `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y}`,
-  `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y}`,
-  // Top Branch
-  `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 20} ${NODES.split.y}, ${NODES.thumbStart.x - 20} ${NODES.thumbStart.y}, ${NODES.thumbStart.x} ${NODES.thumbStart.y}`,
-  `L ${NODES.thumbEnd.x} ${NODES.thumbEnd.y}`,
-  `C ${NODES.thumbEnd.x + 20} ${NODES.thumbEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
-  // Bottom Branch
-  `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 20} ${NODES.split.y}, ${NODES.inferStart.x - 20} ${NODES.inferStart.y}, ${NODES.inferStart.x} ${NODES.inferStart.y}`,
-  `L ${NODES.inferEnd.x} ${NODES.inferEnd.y}`,
-  `C ${NODES.inferEnd.x + 20} ${NODES.inferEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
-  // Exit
-  `M ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+// Full path strings for offset-path
+const PATHS = {
+  intro: `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y}`,
+  preprocess: `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y}`,
+  thumb: `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 20} ${NODES.split.y}, ${NODES.thumbStart.x - 20} ${NODES.thumbStart.y}, ${NODES.thumbStart.x} ${NODES.thumbStart.y} L ${NODES.thumbEnd.x} ${NODES.thumbEnd.y}`,
+  infer: `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 20} ${NODES.split.y}, ${NODES.inferStart.x - 20} ${NODES.inferStart.y}, ${NODES.inferStart.x} ${NODES.inferStart.y} L ${NODES.inferEnd.x} ${NODES.inferEnd.y}`,
+  thumbExit: `M ${NODES.thumbEnd.x} ${NODES.thumbEnd.y} C ${NODES.thumbEnd.x + 20} ${NODES.thumbEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+  inferExit: `M ${NODES.inferEnd.x} ${NODES.inferEnd.y} C ${NODES.inferEnd.x + 20} ${NODES.inferEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+}
+
+const ALL_PIPES_D = [
+    PATHS.intro,
+    PATHS.preprocess,
+    PATHS.thumb,
+    PATHS.infer,
+    `M ${NODES.thumbEnd.x} ${NODES.thumbEnd.y} C ${NODES.thumbEnd.x + 20} ${NODES.thumbEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
+    `M ${NODES.inferEnd.x} ${NODES.inferEnd.y} C ${NODES.inferEnd.x + 20} ${NODES.inferEnd.y}, ${NODES.join.x - 20} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
+    `M ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`
 ].join(' ')
 
 export default function DefineDispatchVisual() {
-  const { items, inputCount, completedCount } = usePipelineSimulation()
-
-  // Filter queues to calculate positions
+  const { items, inputCount, completedCount, isResetting } = usePipelineSimulation()
   const inferQueue = items.filter(i => i.stage === 'inference-queue')
-  const thumbQueue = items.filter(i => i.stage === 'thumb-queue')
 
   return (
     <Box
       position="relative"
       h={{ base: '260px', md: '280px' }}
-      // Use a dark backdrop for the luminous effect to pop?
-      // Or keep light theme but use dark containers? 
-      // The current theme is light. A "Luminous" effect works best on dark.
-      // But we must respect the site theme. We'll use additive blending (mix-blend-mode) which helps even on light.
-      // Actually, for "Energy" on light mode, we want bright, saturated colors.
-      bg="#0f172a" // Slate-900: Force dark mode for this visualization to make it pop?
-      // Alternatively, use a deep gradient
-      style={{
-        background: 'linear-gradient(to bottom right, #0f172a, #1e293b)'
-      }}
+      bg="#0f172a" 
       rounded="lg"
       overflow="hidden"
       borderWidth="1px"
       borderColor="whiteAlpha.100"
+      transition="opacity 0.8s"
+      opacity={isResetting ? 0 : 1}
     >
-      {/* Background Grid */}
-      <Box
-        position="absolute"
-        inset={0}
-        opacity={0.2}
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
-        }}
-      />
-
       <svg
         viewBox="0 0 440 300"
         style={{ width: '100%', height: '100%' }}
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-            {/* Soft Glow Filter */}
-            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+            <filter id="energy-glow" x="-100%" y="-100%" width="300%" height="300%">
+                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                 <feMerge>
                     <feMergeNode in="coloredBlur" />
                     <feMergeNode in="SourceGraphic" />
                 </feMerge>
             </filter>
-            
-            {/* Gradients for Paths */}
-            <linearGradient id="grad-cool" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor={COLOR_COOL_START} />
-                <stop offset="100%" stopColor={COLOR_COOL_END} />
-            </linearGradient>
-            <linearGradient id="grad-warm" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor={COLOR_WARM_START} />
-                <stop offset="100%" stopColor={COLOR_WARM_END} />
-            </linearGradient>
         </defs>
 
         <path
-          d={PIPES_D}
+          d={ALL_PIPES_D}
           fill="none"
           stroke={PIPE_COLOR}
           strokeWidth={STROKE_WIDTH}
@@ -117,156 +87,138 @@ export default function DefineDispatchVisual() {
           strokeLinejoin="round"
         />
 
-        {/* --- STATIC NODES (Subtle Outlines) --- */}
-        <NodeBox x={NODES.preprocess.x} y={NODES.preprocess.y} label="Preprocess" />
-        <NodeBox x={(NODES.thumbStart.x + NODES.thumbEnd.x) / 2} y={NODES.thumbStart.y} label="Thumbnails" />
-        <NodeBox x={(NODES.inferStart.x + NODES.inferEnd.x) / 2} y={NODES.inferStart.y} label="Inference" />
-
-        {/* --- INPUT STACK (Energy Source) --- */}
+        {/* --- INPUT STACK --- */}
         <g transform={`translate(${NODES.start.x}, ${NODES.start.y})`}>
-             <text y="35" fontSize="10" textAnchor="middle" fill="rgba(255,255,255,0.5)">Input</text>
-             {/* Render a pulsating core for the source */}
-             <motion.circle 
-                cx={0} cy={0} r={12} 
-                fill="white" 
-                filter="url(#glow)" 
-                opacity={inputCount > 0 ? 0.8 : 0.2}
-                animate={{ scale: inputCount > 0 ? [1, 1.1, 1] : 1 }}
-                transition={{ duration: 2, repeat: Infinity }}
-             />
-             <text y="4" fontSize="10" textAnchor="middle" fill="#0f172a" fontWeight="bold">
-                 {inputCount}
-             </text>
+            {Array.from({ length: inputCount }).map((_, i) => (
+                <rect
+                    key={i}
+                    x={-10 - i * 0.5}
+                    y={-10 - i * 0.5}
+                    width={20}
+                    height={20}
+                    rx={2}
+                    fill="white"
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth={0.5}
+                    opacity={0.6}
+                />
+            ))}
         </g>
 
-        {/* --- OUTPUT GALLERY (Cooling Down) --- */}
-        <g transform={`translate(${NODES.end.x + 20}, ${NODES.end.y - 40})`}>
-           <rect x="-10" y="0" width="50" height="80" rx="4" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" />
-           <text y="-10" fontSize="10" textAnchor="start" fill="rgba(255,255,255,0.5)">Gallery</text>
-           {Array.from({ length: Math.min(completedCount, 12) }).map((_, i) => {
+        {/* --- OUTPUT GALLERY --- */}
+        <g transform={`translate(${NODES.end.x + 10}, ${NODES.end.y - 40})`}>
+           {Array.from({ length: completedCount }).map((_, i) => {
                const row = Math.floor(i / 3)
                const col = i % 3
                return (
                    <motion.rect
                      key={i}
-                     initial={{ scale: 0, opacity: 0 }}
-                     animate={{ scale: 1, opacity: 0.8 }}
-                     x={-2 + col * 14}
-                     y={8 + row * 14}
+                     initial={{ scale: 0 }}
+                     animate={{ scale: 1 }}
+                     x={col * 14}
+                     y={row * 14}
                      width={10}
                      height={10}
-                     rx={2}
+                     rx={1.5}
                      fill="white"
+                     opacity={0.5}
                    />
                )
            })}
         </g>
 
-        {/* --- DYNAMIC PARTICLES --- */}
+        {/* --- ENERGY PARTICLES --- */}
         <AnimatePresence>
             {items.map(item => {
-                if (item.stage === 'start') return null
-                
-                // For 'done' items, we only show them briefly as they travel to the gallery
-                const isDone = item.stage === 'done'
                 const now = Date.now()
-                if (isDone && (now - item.enteredStageAt > 1000)) return null
-
-                let target = { x: 0, y: 0 }
-                let color = COLOR_START
-                let size = 6
-                let blur = "url(#glow)"
-                
-                // --- POSITION & COLOR LOGIC ---
-                if (item.stage === 'preprocess') {
-                    // Moving to Preprocess
-                     target = NODES.preprocess
-                     color = COLOR_START
-                } 
-                else if (item.stage === 'inference-queue') {
-                   // Queue Cloud: Random jitter around the entry point
-                   const index = inferQueue.indexOf(item)
-                   // We use the ID to create a deterministic "random" position so it doesn't jitter frame-by-frame
-                   // unless we want it to "buzz". Let's settle for stable stacking first.
-                   // "Pulsating Mass": Just cluster them tight?
-                   
-                   const nodeX = (NODES.inferStart.x + NODES.inferEnd.x) / 2
-                   // Stack to the LEFT of the node
-                   target = { 
-                       x: nodeX - 30 - (index * 4), // Tighter overlap
-                       y: NODES.inferStart.y 
-                   }
-                   color = COLOR_WARM_START
-                }
-                else if (item.stage === 'thumb-queue') {
-                   const index = thumbQueue.indexOf(item)
-                   const nodeX = (NODES.thumbStart.x + NODES.thumbEnd.x) / 2
-                   target = { 
-                       x: nodeX - 30 - (index * 4), 
-                       y: NODES.thumbStart.y 
-                   }
-                   color = COLOR_COOL_START
-                }
-                else if (item.stage === 'inference-process') {
-                    // Inside the machine
-                    // Animate through the node?
-                    target = { x: (NODES.inferStart.x + NODES.inferEnd.x) / 2 + 20, y: NODES.inferStart.y }
-                    color = COLOR_WARM_END
-                    size = 8
-                }
-                else if (item.stage === 'thumb-process') {
-                     target = { x: (NODES.thumbStart.x + NODES.thumbEnd.x) / 2 + 20, y: NODES.thumbStart.y }
-                     color = COLOR_COOL_END
-                     size = 7
-                }
-                else if (item.stage === 'done') {
-                    // Final transition to gallery
-                    target = { x: NODES.end.x + 20, y: NODES.end.y }
-                    color = COLOR_DONE
-                    size = 4
-                    blur = "none" // Sharpens up as it hits the gallery
-                }
-
-                return (
-                    <motion.circle
-                        key={item.id}
-                        layoutId={item.id}
-                        animate={{ 
-                            cx: target.x, 
-                            cy: target.y,
-                            fill: color
-                        }}
-                        // Fluid Transition
-                        transition={{ 
-                            type: 'spring', 
-                            stiffness: 40, // Very soft spring --> "Water/Fluid" feel
-                            damping: 15,
-                            mass: 1
-                        }}
-                        initial={false} // Don't animate on mount (handled by layoutId mostly)
-                        r={size}
-                        filter={blur}
-                        style={{ mixBlendMode: 'screen' }} // Additive blending for "Light"
-                    />
-                )
+                if (item.stage === 'start') return null
+                if (item.stage === 'done' && now - item.enteredStageAt > 1000) return null
+                return <EnergyParticle key={item.id} item={item} inferQueue={inferQueue} />
             })}
         </AnimatePresence>
-
       </svg>
-      {/* Legend */}
-      <Box position="absolute" bottom={3} left={4} pointerEvents="none">
-        <Text fontSize="xs" color="rgba(255,255,255,0.4)">
-           Visualization: Concurrent Execution
-        </Text>
-      </Box>
     </Box>
   )
 }
 
-const NodeBox = ({ x, y, label }: { x: number; y: number; label: string }) => (
-  <g transform={`translate(${x}, ${y})`}>
-    {/* Glassmorphism Node */}
-    <rect x="-20" y="-15" width="40" height="30" rx="6" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" />
-    <text y="35" fontSize="10" textAnchor="middle" fill="rgba(255,255,255,0.5)" style={{ userSelect: 'none' }}>{label}</text>
-  </g>
-)
+function EnergyParticle({ item, inferQueue }: { item: PipelineItem, inferQueue: PipelineItem[] }) {
+    let pathD = PATHS.intro
+    let color = COLOR_START
+    let size = 6
+    let isStatic = false
+    let staticPos = { x: 0, y: 0 }
+    let duration = 0.8
+
+    switch (item.stage) {
+        case 'preprocess':
+            pathD = PATHS.intro
+            color = COLOR_START
+            duration = 1.2
+            break
+        case 'inference-queue':
+            isStatic = true
+            const idx = inferQueue.indexOf(item)
+            // Just pile them up at the entrance
+            staticPos = { 
+                x: (NODES.inferStart.x + NODES.inferEnd.x) / 2 - 30 - (idx * 4),
+                y: NODES.inferStart.y 
+            }
+            color = COLOR_WARM_START
+            break
+        case 'inference-process':
+            pathD = PATHS.infer
+            color = COLOR_WARM_END
+            size = 8
+            duration = 2.0
+            break
+        case 'thumb-queue':
+        case 'thumb-process':
+            pathD = PATHS.thumb
+            color = item.stage === 'thumb-queue' ? COLOR_COOL_START : COLOR_COOL_END
+            duration = 0.6
+            break
+        case 'done':
+            pathD = item.type === 'inference' ? PATHS.inferExit : PATHS.thumbExit
+            color = "#ffffff"
+            size = 4
+            duration = 1.0
+            break
+    }
+
+    if (isStatic) {
+        return (
+            <motion.circle
+                layoutId={item.id}
+                cx={staticPos.x}
+                cy={staticPos.y}
+                r={size}
+                fill={color}
+                filter="url(#energy-glow)"
+                style={{ mixBlendMode: 'plus-lighter' }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+            />
+        )
+    }
+
+    return (
+        <motion.circle
+            layoutId={item.id}
+            r={size}
+            fill={color}
+            filter="url(#energy-glow)"
+            initial={{ offsetDistance: '0%', opacity: 0 }}
+            animate={{ offsetDistance: '100%', opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ 
+                offsetPath: `path("${pathD}")` ,
+                mixBlendMode: 'plus-lighter'
+            }}
+            transition={{
+                duration,
+                ease: "linear"
+            }}
+        />
+    )
+}
