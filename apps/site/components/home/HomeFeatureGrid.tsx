@@ -2,6 +2,7 @@ import { Box, SimpleGrid, Stack, Tabs, Text } from '@chakra-ui/react'
 import { createBundledHighlighter, createSingletonShorthands } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { useEffect, useState } from 'react'
+import DefineDispatchVisual from './visuals/DefineDispatchVisual'
 
 const createHighlighter = createBundledHighlighter({
   langs: {
@@ -135,30 +136,6 @@ const CodeTabs = () => (
   </Tabs.Root>
 )
 
-const PipelinePlaceholder = () => (
-  <Box
-    h="100%"
-    minH="300px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Stack align="center" gap={2}>
-      <Text fontSize="sm" color="gray.500">
-        preprocess -{'>'} classify (singleton)
-      </Text>
-      <Text fontSize="sm" color="gray.500">
-        -{'>'} thumbnail (pool)
-      </Text>
-      <Text fontSize="xs" color="gray.400" mt={2}>
-        [Pipeline animation]
-      </Text>
-    </Stack>
-  </Box>
-)
-
 const BackpressurePlaceholder = () => (
   <Box
     h="100%"
@@ -263,7 +240,7 @@ const HomeFeatureGrid = () => {
             </Stack>
           </FeatureCell>
           <FeatureCell borderLeft>
-            <PipelinePlaceholder />
+            <DefineDispatchVisual />
           </FeatureCell>
         </SimpleGrid>
       </Box>
