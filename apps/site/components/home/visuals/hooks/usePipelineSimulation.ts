@@ -19,13 +19,13 @@ export type PipelineItem = {
 }
 
 export const INITIAL_ITEMS = 20
-export const PREPROCESS_DURATION = 500
-export const INFERENCE_DURATION = 700
-export const THUMB_DURATION = 500      
+export const PREPROCESS_DURATION = 1000
+export const INFERENCE_DURATION = 1400
+export const THUMB_DURATION = 1000      
 export const PREPROCESS_WORKERS = 4
 export const THUMB_WORKERS = 4
 export const INFERENCE_WORKERS = 1
-export const ENTRY_INTERVAL = 200 
+export const ENTRY_INTERVAL = 400 
 
 export const usePipelineSimulation = () => {
   const [items, setItems] = useState<PipelineItem[]>([])
@@ -122,8 +122,17 @@ export const usePipelineSimulation = () => {
             return item
         })
 
-        if (!hasChanges && newItems.length === 0) return prevItems
-        return [...processedItems, ...newItems]
+        // 3. CLEANUP
+        // Remove done items after they have had time to animate out (e.g., 500ms)
+        const finalItems = [...processedItems, ...newItems].filter(item => {
+           if (item.stage === 'done') {
+              if (now - item.enteredStageAt > 600) return false // Remove after 600ms
+           }
+           return true
+        })
+
+        if (!hasChanges && newItems.length === 0 && finalItems.length === prevItems.length) return prevItems
+        return finalItems
       })
       
     }, tickRate)

@@ -19,7 +19,7 @@ const NODES = {
 
 // SVG Path definitions
 const PATHS = {
-  // Combined Start -> Preprocess -> Split for the initial entry animation "intro"
+  // Combined Start -> Preprocess -> Split
   intro: `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y}`,
   
   // Split -> Thumb Node
@@ -28,19 +28,16 @@ const PATHS = {
   // Split -> Infer Node
   infer: `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.inferCenter.x - 60} ${NODES.inferCenter.y}, ${NODES.inferCenter.x} ${NODES.inferCenter.y}`,
   
-  // Thumb Node -> Join
-  thumbOut: `M ${NODES.thumbCenter.x} ${NODES.thumbCenter.y} C ${NODES.thumbCenter.x + 60} ${NODES.thumbCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
+  // MERGED OUTPUTS: Node -> Join -> End
+  thumbExit: `M ${NODES.thumbCenter.x} ${NODES.thumbCenter.y} C ${NODES.thumbCenter.x + 60} ${NODES.thumbCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
   
-  // Infer Node -> Join
-  inferOut: `M ${NODES.inferCenter.x} ${NODES.inferCenter.y} C ${NODES.inferCenter.x + 60} ${NODES.inferCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y}`,
-  
-  outro: `M ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+  inferExit: `M ${NODES.inferCenter.x} ${NODES.inferCenter.y} C ${NODES.inferCenter.x + 60} ${NODES.inferCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
 }
 
 export default function DefineDispatchVisual() {
   const { items, inputCount, completedCount } = usePipelineSimulation()
 
-  // Pre-calculate queues for indexing
+  // Pre-calculate queues
   const inferQueue = items.filter((i: PipelineItem) => i.stage === 'inference-queue').sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
   const thumbQueue = items.filter((i: PipelineItem) => i.stage === 'thumb-queue').sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
   
@@ -62,17 +59,6 @@ export default function DefineDispatchVisual() {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-           {/* Streaks need gradients to look like 'luminous energy' */}
-           <linearGradient id="trace-cool" gradientUnits="objectBoundingBox">
-             <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-             <stop offset="100%" stopColor="#3b82f6" />
-           </linearGradient>
-           <linearGradient id="trace-warm" gradientUnits="objectBoundingBox">
-             <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-             <stop offset="100%" stopColor="#ef4444" />
-           </linearGradient>
-
-           {/* Glows */}
            <filter id="glow-basic" x="-50%" y="-50%" width="200%" height="200%">
              <feGaussianBlur stdDeviation="1.5" result="blur" />
              <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -81,15 +67,18 @@ export default function DefineDispatchVisual() {
 
         {/* --- DAG EDGES (Static Pipes) --- */}
         <g stroke={PIPE_COLOR} fill="none" strokeWidth={STROKE_WIDTH_BASE} strokeLinecap="round">
-          {Object.values(PATHS).map((d, i) => (
-            <path key={i} d={d} />
-          ))}
+          {/* We draw specific segments to form the visual tree, avoiding overlaps if possible */}
+          <path d={PATHS.intro} />
+          <path d={PATHS.thumb} />
+          <path d={PATHS.infer} />
+          {/* Draw exit paths - simple version just draws the curves */}
+          <path d={PATHS.thumbExit} />
+          <path d={PATHS.inferExit} />
         </g>
         
         {/* --- PACKETS --- */}
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {items.map((item: PipelineItem) => {
-             // Calculate queue index
              let queueIndex = -1
              if (item.stage === 'inference-queue') {
                 queueIndex = inferQueue.findIndex((i: PipelineItem) => i.id === item.id)
@@ -97,7 +86,7 @@ export default function DefineDispatchVisual() {
                 queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
              }
              
-             return <Packet key={item.id} item={item} queueIndex={queueIndex} />
+             return <Packet key={`${item.id}-${item.stage}`} item={item} queueIndex={queueIndex} />
           })}
         </AnimatePresence>
 
@@ -112,8 +101,8 @@ export default function DefineDispatchVisual() {
           {Array.from({ length: Math.min(inputCount, 6) }).map((_, i) => (
              <motion.rect
                 key={i}
-                x={-i * 0.5} // Minimal horizontal shift
-                y={-i * 2} // Vertical stack
+                x={-i * 0.5} 
+                y={-i * 2} 
                 width={20}
                 height={20}
                 rx={2}
@@ -122,7 +111,7 @@ export default function DefineDispatchVisual() {
                 strokeWidth={1}
                 initial={false}
                 animate={{ x: -i * 0.5, y: -i * 2, opacity: 1 }}
-                exit={{ opacity: 0, x: 20 }} // Fly out to right upon depletion
+                exit={{ opacity: 0, x: 20 }}
              />
           ))}
         </g>
@@ -141,95 +130,88 @@ export default function DefineDispatchVisual() {
 function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }) {
   const isThumb = item.type === 'thumb'
   
-  let color = '#333'
   let path = ''
+  let finalOffset = '100%'
+  let startOffset = '0%' 
   let duration = 0
-  let targetOffset = '100%'
-  let initialOffset = '0%'
-  let width = 12 // "Streak" length
-  let height = 3  // Thickness
-  
-  // State Mapping
+  let color = '#333'
+  let opacity = 1
+  // Sleek lines: wider width
+  let width = 12 
+
   if (item.stage === 'preprocess') {
-     path = PATHS.intro // Travels from Start -> Preprocess -> Split
+     path = PATHS.intro 
      duration = PREPROCESS_DURATION / 1000
-     color = '#64748b' // Slate
+     color = '#64748b' 
+     startOffset = '0%'
+     finalOffset = '100%'
   }
   else if (item.stage === 'thumb-queue') {
-    path = PATHS.thumb
-    duration = 0.5 
-    color = '#8b5cf6' 
-    // Stack at end: 100% - (index * 8%)
-    // Clamp to ensure they don't go backwards past 0
-    const offsetVal = Math.max(0, 95 - (queueIndex * 8))
-    targetOffset = `${offsetVal}%`
+     path = PATHS.thumb
+     color = '#8b5cf6'
+     startOffset = '0%'
+     // Tighter Stacking: 3% vs 8% spacing
+     // Ensuring they form a "line"
+     finalOffset = `${Math.max(0, 95 - (queueIndex * 3))}%`
+     // Slightly overlap: width 12, spacing ~3% (approx 10px?)
+     // That should create a solid looking beam.
+     duration = 0.5
   }
   else if (item.stage === 'thumb-process') {
-    // For process, we want to look like we are "in" the node or moving through it?
-    // Let's pulse at the node location (end of input path)
-    path = PATHS.thumb
-    initialOffset = '95%'
-    targetOffset = '100%'
-    duration = THUMB_DURATION / 1000
-    color = '#3b82f6'
-    // Alternatively, jump to output path? 
-    // Simpler: Process = sit at node. 
+     path = PATHS.thumb
+     color = '#3b82f6'
+     startOffset = '95%' 
+     finalOffset = '95%' // Stay at node
+     duration = THUMB_DURATION / 1000
   }
   else if (item.stage === 'inference-queue') {
-    path = PATHS.infer
-    duration = 0.5 
-    color = '#facc15'
-    // Stack at end of input path
-    const offsetVal = Math.max(0, 95 - (queueIndex * 8))
-    targetOffset = `${offsetVal}%`
+     path = PATHS.infer
+     color = '#facc15' 
+     startOffset = '0%'
+     finalOffset = `${Math.max(0, 95 - (queueIndex * 3))}%`
+     duration = 0.5
   }
   else if (item.stage === 'inference-process') {
-    path = PATHS.infer
-    initialOffset = '95%'
-    targetOffset = '100%'
-    duration = INFERENCE_DURATION / 1000
-    color = '#ef4444' 
+     path = PATHS.infer
+     color = '#ef4444' 
+     startOffset = '95%'
+     finalOffset = '95%' 
+     duration = INFERENCE_DURATION / 1000
   }
   else if (item.stage === 'done') {
-     path = isThumb ? PATHS.thumbOut : PATHS.inferOut
-     duration = 0.4
-     color = isThumb ? '#3b82f6' : '#ef4444'
+     // Use the MERGED Exit Paths
+     path = isThumb ? PATHS.thumbExit : PATHS.inferExit
+     color = isThumb ? '#3b82f6' : '#ef4444' 
+     startOffset = '0%' // This corresponds to the node position in the new path?
+     // Wait, thumbExit starts at ThumbNode. So 0% IS the node. Correct.
+     finalOffset = '100%'
+     duration = 0.8 // Slower exit
   }
-  
-  const isQueued = item.stage.includes('queue')
+
   const isProcess = item.stage.includes('process')
 
-  // Render a Rect that is rotated along the path
-  const style: React.CSSProperties = {
-     offsetPath: `path("${path}")`,
-     offsetDistance: initialOffset,
-     offsetRotate: 'auto', // Follow curvature
-  }
-  
-  // If processing, maybe we just pulse a circle at the node instead of a streak?
-  // User asked for "Sleek luminous line". 
-  
   return (
     <motion.rect
-      width={width}
-      height={height}
-      rx={1.5}
-      fill={color}
-      style={style}
-      // Add glow filter
-      filter="url(#glow-basic)"
-      initial={{ offsetDistance: initialOffset, opacity: 0 }}
+      layoutId={item.id} 
+      initial={{ offsetDistance: startOffset, opacity: 1 }} // Start fully visible
       animate={{ 
-        offsetDistance: targetOffset,
-        opacity: isProcess ? [1, 0.5, 1] : 1, // Pulse if processing
-        width: isQueued ? 4 : 12, // Shorten if in queue (dots)
+        offsetDistance: finalOffset,
+        fill: color,
+        width: width, // Keep wide
+        opacity: isProcess ? [1, 0.5, 1] : 1,
+      }}
+      style={{
+         offsetPath: `path("${path}")`,
+         offsetRotate: 'auto',
+         height: 3,
+         rx: 1.5,
       }}
       transition={{ 
-        duration: isQueued ? 0.3 : duration, 
-        ease: isQueued ? 'easeOut' : 'linear',
+        duration: duration, 
+        ease: 'linear', // Consistent speed
         opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 }
       }}
-      exit={{ opacity: 0, scale: 0 }}
+      // Remove exit animation to prevent "pulsing out"
     />
   )
 }
