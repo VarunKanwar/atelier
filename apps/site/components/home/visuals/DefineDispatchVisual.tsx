@@ -382,13 +382,14 @@ function Packet({
   }
 
   const isProcess = item.stage.includes('process')
-  const startPercent = Number.parseFloat(startOffset)
-  const endPercent = Number.parseFloat(finalOffset)
-  const startDash = -startPercent
-  const endDash = -endPercent
   const lengthPx = pathLengths[pathKey] ?? 100
   const segmentPercent = Math.min(100, (PACKET_LENGTH_PX / Math.max(1, lengthPx)) * 100)
   const dashArray = `${segmentPercent} ${100 - segmentPercent}`
+  const clampOffset = (value: number) => Math.min(Math.max(0, value), 100 - segmentPercent)
+  const startPercent = clampOffset(Number.parseFloat(startOffset))
+  const endPercent = clampOffset(Number.parseFloat(finalOffset))
+  const startDash = -startPercent
+  const endDash = -endPercent
 
   return (
     <g>
