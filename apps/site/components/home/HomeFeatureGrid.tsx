@@ -1,7 +1,7 @@
 import { Box, SimpleGrid, Stack, Tabs, Text } from '@chakra-ui/react'
+import { useEffect, useState } from 'react'
 import { createBundledHighlighter, createSingletonShorthands } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
-import { useEffect, useState } from 'react'
 import DefineDispatchVisual from './visuals/DefineDispatchVisual'
 
 const createHighlighter = createBundledHighlighter({
@@ -227,12 +227,12 @@ const HomeFeatureGrid = () => {
           <FeatureCell>
             <Stack gap={4}>
               <Stack gap={1}>
-                  <Text fontSize="xl" fontWeight="semibold" color="gray.900">
-                    Define and Dispatch
-                  </Text>
-                  <Text fontSize="sm" color="gray.600">
-                    Define tasks once and call them like local methods.
-                  </Text>
+                <Text fontSize="xl" fontWeight="semibold" color="gray.900">
+                  Define and Dispatch
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  Define tasks once and call them like local methods.
+                </Text>
               </Stack>
               <Box pt={2}>
                 <CodeTabs />
@@ -255,7 +255,8 @@ const HomeFeatureGrid = () => {
                     Predictable Backpressure
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Control pipeline concurrency, and decide whether to block, reject, or shed load when tasks are saturated.
+                    Control pipeline concurrency, and decide whether to block, reject, or shed load
+                    when tasks are saturated.
                   </Text>
                 </Stack>
                 <Box pt={2}>
