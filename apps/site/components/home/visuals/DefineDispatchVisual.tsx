@@ -134,6 +134,7 @@ export default function DefineDispatchVisual() {
 }
 
 function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }) {
+  // AG: Why do we need this?
   const isThumb = item.type === 'thumb'
   
   // Calculate Target State based on Item Stage
@@ -156,7 +157,10 @@ function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }
      path = PATHS.thumb
      color = '#8b5cf6'
      startOffset = '0%'
+     // Stack at end of the NEW longer path (starts at Preprocess)
+     // Math: 95% - (index * 3%)
      finalOffset = `${Math.max(0, 95 - (queueIndex * 3))}%`
+     // Slightly overlap to create beam
      width = 12
      duration = 0.5
   }

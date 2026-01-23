@@ -255,7 +255,7 @@ const HomeFeatureGrid = () => {
                     Predictable Backpressure
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Decide whether to block, reject, or shed load when saturated.
+                    Control pipeline concurrency, and decide whether to block, reject, or shed load when tasks are saturated.
                   </Text>
                 </Stack>
                 <Box pt={2}>
@@ -267,10 +267,10 @@ const HomeFeatureGrid = () => {
               <Stack gap={4}>
                 <Stack gap={1}>
                   <Text fontSize="xl" fontWeight="semibold" color="gray.900">
-                    Keyed Cancellation
+                    Flexible Cancellation
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Cancel whole job groups across queued and in-flight work.
+                    Cancel a job group by key across waiting, queued, and in‑flight work.
                   </Text>
                 </Stack>
                 <Box pt={2}>
