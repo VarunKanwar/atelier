@@ -1,17 +1,30 @@
 import { Box } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  EXIT_DURATION,
   INFERENCE_DURATION,
   type PipelineItem,
   PREPROCESS_DURATION,
   THUMB_DURATION,
+  TRAVEL_DURATION,
   usePipelineSimulation,
 } from './hooks/usePipelineSimulation'
 
+/*
+ * Visual intent: a stylized, mechanistic view of an Atelier-powered workflow.
+ * A local photo album app runs a DAG: preprocess → split into thumbnails + classification
+ * → join into the gallery. Packets represent images moving through the runtime, with
+ * queueing and processing states visible to emphasize worker pools vs singleton
+ * bottlenecks and backpressure under load.
+ */
+
 // Layout anchors for the pipeline diagram in SVG coordinate space.
 const STROKE_WIDTH_BASE = 2
-const PIPE_COLOR = '#E2E8F0'
+const PIPE_STROKE = 'url(#pipe-gradient)'
+const PIPE_INTRO_STROKE = '#cbd5e1'
 const PIPE_COLOR_DARK = '#CBD5E1'
+const PACKET_LENGTH = 18
+const PACKET_THICKNESS = 2
 
 const NODES = {
   start: { x: 50, y: 150 },
@@ -44,6 +57,9 @@ export default function DefineDispatchVisual() {
   const { items, inputCount, completedCount } = usePipelineSimulation()
 
   // Pre-calculate queues
+  const preprocessQueue = items
+    .filter((i: PipelineItem) => i.stage === 'preprocess-queue')
+    .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
   const inferQueue = items
     .filter((i: PipelineItem) => i.stage === 'inference-queue')
     .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
@@ -51,8 +67,11 @@ export default function DefineDispatchVisual() {
     .filter((i: PipelineItem) => i.stage === 'thumb-queue')
     .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
 
+  const preprocessActive = items.filter((i: PipelineItem) => i.stage === 'preprocess').length
+  const thumbActive = items.filter((i: PipelineItem) => i.stage === 'thumb-process').length
+  const inferenceActive = items.filter((i: PipelineItem) => i.stage === 'inference-process').length
   const inferenceQueueLen = inferQueue.length
-  const isInferenceProcessing = items.some((i: PipelineItem) => i.stage === 'inference-process')
+  const isInferenceProcessing = inferenceActive > 0
   const isStressed = inferenceQueueLen > 1
 
   return (
@@ -74,6 +93,33 @@ export default function DefineDispatchVisual() {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
+          <linearGradient id="pipe-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#cbd5e1" />
+            <stop offset="50%" stopColor="#a5b4fc" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+          <linearGradient id="packet-rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#22d3ee" />
+            <stop offset="20%" stopColor="#3b82f6" />
+            <stop offset="40%" stopColor="#8b5cf6" />
+            <stop offset="60%" stopColor="#ec4899" />
+            <stop offset="80%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#facc15" />
+          </linearGradient>
+          <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="packet-glow-strong" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
           <filter id="glow-basic" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="1.5" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -81,8 +127,8 @@ export default function DefineDispatchVisual() {
         </defs>
 
         {/* --- DAG EDGES (Static Pipes) --- */}
-        <g stroke={PIPE_COLOR} fill="none" strokeWidth={STROKE_WIDTH_BASE} strokeLinecap="round">
-          <path d={PATHS.intro} />
+        <g stroke={PIPE_STROKE} fill="none" strokeWidth={STROKE_WIDTH_BASE} strokeLinecap="round">
+          <path d={PATHS.intro} stroke={PIPE_INTRO_STROKE} />
           <path d={PATHS.thumb} />
           <path d={PATHS.infer} />
           <path d={PATHS.thumbExit} />
@@ -94,7 +140,9 @@ export default function DefineDispatchVisual() {
         <AnimatePresence initial={false}>
           {items.map((item: PipelineItem) => {
             let queueIndex = -1
-            if (item.stage === 'inference-queue') {
+            if (item.stage === 'preprocess-queue') {
+              queueIndex = preprocessQueue.findIndex((i: PipelineItem) => i.id === item.id)
+            } else if (item.stage === 'inference-queue') {
               queueIndex = inferQueue.findIndex((i: PipelineItem) => i.id === item.id)
             } else if (item.stage === 'thumb-queue') {
               queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
@@ -109,13 +157,15 @@ export default function DefineDispatchVisual() {
           x={NODES.preprocess.x}
           y={NODES.preprocess.y}
           label="Preprocess"
-          isActive={items.some((i: PipelineItem) => i.stage === 'preprocess')}
+          isActive={preprocessActive > 0}
+          activeWorkers={preprocessActive}
         />
         <MachineNode
           x={NODES.thumbCenter.x}
           y={NODES.thumbCenter.y}
           label="Thumbnails"
-          isActive={items.some((i: PipelineItem) => i.stage === 'thumb-process')}
+          isActive={thumbActive > 0}
+          activeWorkers={thumbActive}
           variant="pool"
         />
         <MachineNode
@@ -123,6 +173,7 @@ export default function DefineDispatchVisual() {
           y={NODES.inferCenter.y}
           label="Inference"
           isActive={isInferenceProcessing}
+          activeWorkers={inferenceActive}
           isStressed={isStressed}
           variant="singleton"
           queueLen={inferenceQueueLen}
@@ -168,55 +219,63 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   // Used to select the correct exit path once the item completes.
   const isThumb = item.type === 'thumb'
 
-  // Stage → motion recipe (path, offsets, duration, color).
+  // Stage → motion recipe (path, offsets, duration, accent).
   let path = ''
   let finalOffset = '100%'
   let startOffset = '0%'
   let duration = 0
-  let color = '#333'
-  let width = 12
+  let accent = '#94a3b8'
+  let width = PACKET_LENGTH
 
-  if (item.stage === 'preprocess') {
+  if (item.stage === 'preprocess-queue') {
     path = PATHS.intro
-    duration = PREPROCESS_DURATION / 1000
-    color = '#64748b'
-    startOffset = '0%'
-    finalOffset = '100%'
-  } else if (item.stage === 'thumb-queue') {
-    path = PATHS.thumb
-    color = '#8b5cf6'
+    duration = TRAVEL_DURATION / 1000
+    accent = '#38bdf8'
     startOffset = '0%'
     // Stack queue items by backing up along the path.
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-    width = 12
-    duration = 0.5
+  } else if (item.stage === 'preprocess') {
+    path = PATHS.intro
+    duration = PREPROCESS_DURATION / 1000
+    accent = '#38bdf8'
+    // Hold at the worker node while processing.
+    startOffset = '95%'
+    finalOffset = '95%'
+  } else if (item.stage === 'thumb-queue') {
+    path = PATHS.thumb
+    accent = '#a78bfa'
+    startOffset = '0%'
+    // Stack queue items by backing up along the path.
+    finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
+    width = PACKET_LENGTH
+    duration = TRAVEL_DURATION / 1000
   } else if (item.stage === 'thumb-process') {
     path = PATHS.thumb
-    color = '#3b82f6'
+    accent = '#60a5fa'
     // Hold at the worker node while processing.
     startOffset = '95%'
     finalOffset = '95%'
     duration = THUMB_DURATION / 1000
   } else if (item.stage === 'inference-queue') {
     path = PATHS.infer
-    color = '#facc15'
+    accent = '#fbbf24'
     startOffset = '0%'
     // Stack queue items by backing up along the path.
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-    duration = 0.5
+    duration = TRAVEL_DURATION / 1000
   } else if (item.stage === 'inference-process') {
     path = PATHS.infer
-    color = '#ef4444'
+    accent = '#f43f5e'
     // Hold at the worker node while processing.
     startOffset = '95%'
     finalOffset = '95%'
     duration = INFERENCE_DURATION / 1000
   } else if (item.stage === 'done') {
     path = isThumb ? PATHS.thumbExit : PATHS.inferExit
-    color = isThumb ? '#3b82f6' : '#ef4444'
+    accent = isThumb ? '#60a5fa' : '#f43f5e'
     startOffset = '0%'
     finalOffset = '100%'
-    duration = 0.8
+    duration = EXIT_DURATION / 1000
   }
 
   const isProcess = item.stage.includes('process')
@@ -227,16 +286,19 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
       initial={{ offsetDistance: startOffset, opacity: 1 }}
       animate={{
         offsetDistance: finalOffset,
-        fill: color,
+        stroke: accent,
         width: width,
         opacity: isProcess ? [1, 0.5, 1] : 1,
       }}
       style={{
         offsetPath: `path("${path}")`,
         offsetRotate: 'auto',
-        height: 3,
-        rx: 1.5,
+        height: PACKET_THICKNESS,
+        rx: PACKET_THICKNESS / 2,
       }}
+      fill="url(#packet-rainbow)"
+      strokeWidth={0.75}
+      filter={isProcess ? 'url(#packet-glow-strong)' : 'url(#packet-glow)'}
       transition={{
         duration: duration,
         ease: 'linear',
@@ -255,6 +317,7 @@ function MachineNode({
   isActive,
   isStressed: _isStressed,
   variant,
+  activeWorkers = 0,
   queueLen = 0,
 }: {
   x: number
@@ -263,6 +326,7 @@ function MachineNode({
   isActive: boolean
   isStressed?: boolean
   variant?: 'pool' | 'singleton'
+  activeWorkers?: number
   queueLen?: number
 }) {
   // Node appearance encodes load and activity; the singleton warns on queue growth.
@@ -304,20 +368,36 @@ function MachineNode({
         {label}
       </text>
 
-      {isActive && (
-        <motion.circle
-          r={4}
-          fill={
-            variant === 'singleton' && queueLen > 2
-              ? '#ef4444'
-              : variant === 'pool'
-                ? '#8b5cf6'
-                : '#3b82f6'
-          }
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ repeat: Infinity, duration: 1 }}
-        />
+      {activeWorkers > 0 && (
+        <g transform="translate(0, 6)">
+          {Array.from({ length: activeWorkers }).map((_, index) => {
+            const barWidth = 4
+            const barGap = 3
+            const totalWidth = activeWorkers * barWidth + (activeWorkers - 1) * barGap
+            const xOffset = -totalWidth / 2 + index * (barWidth + barGap)
+            return (
+              <motion.rect
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable visual ordering
+                key={index}
+                x={xOffset}
+                y={-6}
+                width={barWidth}
+                height={12}
+                rx={2}
+                fill={strokeColor}
+                animate={{ height: [6, 12, 7], y: [-3, -6, -4] }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 0.8,
+                  delay: index * 0.1,
+                  ease: 'easeInOut',
+                }}
+              />
+            )
+          })}
+        </g>
       )}
+
     </g>
   )
 }
