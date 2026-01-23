@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
 export type PipelineStage =
-  | 'start'
   | 'preprocess-queue'
   | 'preprocess'
   | 'inference-queue'
@@ -65,7 +64,7 @@ export const usePipelineSimulation = () => {
               id: String(id),
               originalId: id,
               type: 'main',
-              stage: 'preprocess-queue' as PipelineStage,
+              stage: 'preprocess-queue',
               enteredStageAt: now,
               label: `img-${id}`,
             })
@@ -93,7 +92,7 @@ export const usePipelineSimulation = () => {
 
             if (canProcess && hasTraveled) {
               hasChanges = true
-              return { ...item, stage: 'preprocess' as PipelineStage, enteredStageAt: now }
+              return { ...item, stage: 'preprocess', enteredStageAt: now }
             }
           }
 
@@ -104,8 +103,8 @@ export const usePipelineSimulation = () => {
             nextItem = {
               ...item,
               id: `${item.originalId}-infer`,
-              type: 'inference' as 'inference',
-              stage: 'inference-queue' as PipelineStage,
+              type: 'inference',
+              stage: 'inference-queue',
               enteredStageAt: now,
             }
             // ...and the thumbnail branch.
@@ -113,7 +112,7 @@ export const usePipelineSimulation = () => {
               originalId: item.originalId,
               id: `${item.originalId}-thumb`,
               type: 'thumb',
-              stage: 'thumb-queue' as PipelineStage,
+              stage: 'thumb-queue',
               enteredStageAt: now,
               label: item.label,
             })
@@ -133,7 +132,7 @@ export const usePipelineSimulation = () => {
 
             if (canProcess && hasTraveled) {
               hasChanges = true
-              return { ...item, stage: 'inference-process' as PipelineStage, enteredStageAt: now }
+              return { ...item, stage: 'inference-process', enteredStageAt: now }
             }
           }
 
@@ -142,7 +141,7 @@ export const usePipelineSimulation = () => {
             hasChanges = true
             // Each original item completes twice (infer + thumb), so count half.
             setCompletedCount(c => c + 0.5)
-            return { ...item, stage: 'done' as PipelineStage, enteredStageAt: now }
+            return { ...item, stage: 'done', enteredStageAt: now }
           }
 
           // Thumbnail Queue -> Process
@@ -158,7 +157,7 @@ export const usePipelineSimulation = () => {
 
             if (canProcess && hasTraveled) {
               hasChanges = true
-              return { ...item, stage: 'thumb-process' as PipelineStage, enteredStageAt: now }
+              return { ...item, stage: 'thumb-process', enteredStageAt: now }
             }
           }
 
@@ -167,7 +166,7 @@ export const usePipelineSimulation = () => {
             hasChanges = true
             // Each original item completes twice (infer + thumb), so count half.
             setCompletedCount(c => c + 0.5)
-            return { ...item, stage: 'done' as PipelineStage, enteredStageAt: now }
+            return { ...item, stage: 'done', enteredStageAt: now }
           }
 
           return item
@@ -194,17 +193,17 @@ export const usePipelineSimulation = () => {
 
   // Auto-loop once all items have drained.
   useEffect(() => {
-     if (inputCount === 0 && items.length === 0) {
-        const timer = setTimeout(() => {
-           // Reset simulation state for the next loop.
-           setInputCount(INITIAL_ITEMS)
-           setCompletedCount(0)
-           nextId.current = 0
-           lastEntryTime.current = 0
-           setCycle(current => current + 1)
-        }, 100) 
-        return () => clearTimeout(timer)
-     }
+    if (inputCount === 0 && items.length === 0) {
+      const timer = setTimeout(() => {
+        // Reset simulation state for the next loop.
+        setInputCount(INITIAL_ITEMS)
+        setCompletedCount(0)
+        nextId.current = 0
+        lastEntryTime.current = 0
+        setCycle(current => current + 1)
+      }, 100)
+      return () => clearTimeout(timer)
+    }
   }, [inputCount, items.length])
 
   return {
