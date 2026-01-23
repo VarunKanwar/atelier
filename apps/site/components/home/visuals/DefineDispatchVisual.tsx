@@ -19,14 +19,15 @@ const NODES = {
 
 // SVG Path definitions
 const PATHS = {
-  // Combined Start -> Preprocess -> Split
-  intro: `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y}`,
+  // Intro: Start -> Preprocess (Ends exactly at the node)
+  intro: `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y}`,
   
-  // Split -> Thumb Node
-  thumb: `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.thumbCenter.x - 60} ${NODES.thumbCenter.y}, ${NODES.thumbCenter.x} ${NODES.thumbCenter.y}`,
+  // Branch A: Preprocess -> Split -> Thumb Node
+  // Overlaps with Infer path until Split point
+  thumb: `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.thumbCenter.x - 60} ${NODES.thumbCenter.y}, ${NODES.thumbCenter.x} ${NODES.thumbCenter.y}`,
   
-  // Split -> Infer Node
-  infer: `M ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.inferCenter.x - 60} ${NODES.inferCenter.y}, ${NODES.inferCenter.x} ${NODES.inferCenter.y}`,
+  // Branch B: Preprocess -> Split -> Infer Node
+  infer: `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.inferCenter.x - 60} ${NODES.inferCenter.y}, ${NODES.inferCenter.x} ${NODES.inferCenter.y}`,
   
   // MERGED OUTPUTS: Node -> Join -> End
   thumbExit: `M ${NODES.thumbCenter.x} ${NODES.thumbCenter.y} C ${NODES.thumbCenter.x + 60} ${NODES.thumbCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
@@ -48,15 +49,20 @@ export default function DefineDispatchVisual() {
   return (
     <Box
       position="relative"
-      // h={{ base: '260px', md: '280px' }}
+      width="100%"
+      height="100%"
+      minH={{ base: '260px', md: '300px' }} // Ensure enough height
       bg="transparent"
       rounded="lg"
       overflow="hidden"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
     >
       <svg
-        viewBox="0 0 460 300"
-        style={{ width: '100%', height: '100%' }}
-        preserveAspectRatio="xMidYMid meet"
+        viewBox="0 0 500 300" // Expanded view to prevents clipping (Top node y=54, Bottom node y=246)
+        style={{ width: '100%', height: '100%', maxWidth: '600px' }} 
+        preserveAspectRatio="xMidYMid meet" 
       >
         <defs>
            <filter id="glow-basic" x="-50%" y="-50%" width="200%" height="200%">
@@ -130,13 +136,13 @@ export default function DefineDispatchVisual() {
 function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }) {
   const isThumb = item.type === 'thumb'
   
+  // Calculate Target State based on Item Stage
   let path = ''
   let finalOffset = '100%'
   let startOffset = '0%' 
   let duration = 0
   let color = '#333'
   let opacity = 1
-  // Sleek lines: wider width
   let width = 12 
 
   if (item.stage === 'preprocess') {
@@ -150,18 +156,16 @@ function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }
      path = PATHS.thumb
      color = '#8b5cf6'
      startOffset = '0%'
-     // Tighter Stacking: 3% vs 8% spacing
-     // Ensuring they form a "line"
      finalOffset = `${Math.max(0, 95 - (queueIndex * 3))}%`
-     // Slightly overlap: width 12, spacing ~3% (approx 10px?)
-     // That should create a solid looking beam.
+     width = 12
      duration = 0.5
   }
   else if (item.stage === 'thumb-process') {
      path = PATHS.thumb
      color = '#3b82f6'
+     // Stay at node (which is now at 95% of this longer path)
      startOffset = '95%' 
-     finalOffset = '95%' // Stay at node
+     finalOffset = '95%' 
      duration = THUMB_DURATION / 1000
   }
   else if (item.stage === 'inference-queue') {
@@ -179,13 +183,11 @@ function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }
      duration = INFERENCE_DURATION / 1000
   }
   else if (item.stage === 'done') {
-     // Use the MERGED Exit Paths
      path = isThumb ? PATHS.thumbExit : PATHS.inferExit
      color = isThumb ? '#3b82f6' : '#ef4444' 
-     startOffset = '0%' // This corresponds to the node position in the new path?
-     // Wait, thumbExit starts at ThumbNode. So 0% IS the node. Correct.
+     startOffset = '0%'
      finalOffset = '100%'
-     duration = 0.8 // Slower exit
+     duration = 0.8 
   }
 
   const isProcess = item.stage.includes('process')
@@ -193,11 +195,11 @@ function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }
   return (
     <motion.rect
       layoutId={item.id} 
-      initial={{ offsetDistance: startOffset, opacity: 1 }} // Start fully visible
+      initial={{ offsetDistance: startOffset, opacity: 1 }} 
       animate={{ 
         offsetDistance: finalOffset,
         fill: color,
-        width: width, // Keep wide
+        width: width, 
         opacity: isProcess ? [1, 0.5, 1] : 1,
       }}
       style={{
@@ -208,10 +210,11 @@ function Packet({ item, queueIndex }: { item: PipelineItem, queueIndex: number }
       }}
       transition={{ 
         duration: duration, 
-        ease: 'linear', // Consistent speed
+        ease: 'linear', 
         opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 }
       }}
-      // Remove exit animation to prevent "pulsing out"
+      // Fast fade out to prevent accumulation
+      exit={{ opacity: 0, transition: { duration: 0.1 } }}
     />
   )
 }
@@ -222,18 +225,13 @@ function MachineNode({ x, y, label, isActive, isStressed, variant, queueLen = 0 
   // Moderate Queue: #facc15 (Yellow/Orange)
   // Heavy Queue: #ef4444 (Red)
   
-  // Create a dynamic fill color based on queue length for singleton workers
-  // Pool workers generally don't show this stress in the same way for this viz
   let fillColor = '#fff'
   let strokeColor = '#CBD5E1'
 
   if (variant === 'singleton') {
-      // Interpolate from White to Red as queue goes from 0 to 5+
-      // Simple discrete steps for clarity or could be smooth
       if (queueLen > 4) fillColor = '#fecaca' // Light Red
       else if (queueLen > 2) fillColor = '#fef08a' // Light Yellow
       
-      // Border color gets more intense
       if (queueLen > 4) strokeColor = '#ef4444'
       else if (queueLen > 2) strokeColor = '#eab308'
       else if (isActive) strokeColor = '#3b82f6'
