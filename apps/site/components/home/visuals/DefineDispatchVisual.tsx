@@ -60,7 +60,7 @@ const PATHS = {
 }
 
 export default function DefineDispatchVisual() {
-  const { items, inputCount, completedCount } = usePipelineSimulation()
+  const { items, inputCount, completedCount, cycle } = usePipelineSimulation()
 
   // Pre-calculate queues
   const preprocessQueue = items
@@ -144,83 +144,85 @@ export default function DefineDispatchVisual() {
           <path d={PATHS.inferExit} />
         </g>
 
-        {/* --- PACKETS --- */}
-        {/* Packets are animated as glowing path segments (dash offset). */}
-        <AnimatePresence initial={false}>
-          {items.map((item: PipelineItem) => {
-            let queueIndex = -1
-            if (item.stage === 'preprocess-queue') {
-              queueIndex = preprocessQueue.findIndex((i: PipelineItem) => i.id === item.id)
-            } else if (item.stage === 'inference-queue') {
-              queueIndex = inferQueue.findIndex((i: PipelineItem) => i.id === item.id)
-            } else if (item.stage === 'thumb-queue') {
-              queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
-            }
+        <g key={cycle}>
+          {/* --- PACKETS --- */}
+          {/* Packets are animated as glowing path segments (dash offset). */}
+          <AnimatePresence initial={false}>
+            {items.map((item: PipelineItem) => {
+              let queueIndex = -1
+              if (item.stage === 'preprocess-queue') {
+                queueIndex = preprocessQueue.findIndex((i: PipelineItem) => i.id === item.id)
+              } else if (item.stage === 'inference-queue') {
+                queueIndex = inferQueue.findIndex((i: PipelineItem) => i.id === item.id)
+              } else if (item.stage === 'thumb-queue') {
+                queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
+              }
 
-            return <Packet key={`${item.id}-${item.stage}`} item={item} queueIndex={queueIndex} />
-          })}
-        </AnimatePresence>
+              return <Packet key={`${item.id}-${item.stage}`} item={item} queueIndex={queueIndex} />
+            })}
+          </AnimatePresence>
 
-        {/* --- NODES --- */}
-        <MachineNode
-          x={NODES.preprocess.x}
-          y={NODES.preprocess.y}
-          label="Preprocess"
-          isActive={preprocessActiveDisplay > 0}
-          activeWorkers={preprocessActiveDisplay}
-          maxWorkers={PREPROCESS_WORKERS}
-        />
-        <MachineNode
-          x={NODES.thumbCenter.x}
-          y={NODES.thumbCenter.y}
-          label="Thumbnails"
-          isActive={thumbActiveDisplay > 0}
-          activeWorkers={thumbActiveDisplay}
-          maxWorkers={THUMB_WORKERS}
-          variant="pool"
-        />
-        <MachineNode
-          x={NODES.inferCenter.x}
-          y={NODES.inferCenter.y}
-          label="Inference"
-          isActive={isInferenceProcessing}
-          activeWorkers={inferenceActiveDisplay}
-          maxWorkers={INFERENCE_WORKERS}
-          isStressed={isStressed}
-          variant="singleton"
-          queueLen={inferenceQueueLen}
-        />
+          {/* --- NODES --- */}
+          <MachineNode
+            x={NODES.preprocess.x}
+            y={NODES.preprocess.y}
+            label="Preprocess"
+            isActive={preprocessActiveDisplay > 0}
+            activeWorkers={preprocessActiveDisplay}
+            maxWorkers={PREPROCESS_WORKERS}
+          />
+          <MachineNode
+            x={NODES.thumbCenter.x}
+            y={NODES.thumbCenter.y}
+            label="Thumbnails"
+            isActive={thumbActiveDisplay > 0}
+            activeWorkers={thumbActiveDisplay}
+            maxWorkers={THUMB_WORKERS}
+            variant="pool"
+          />
+          <MachineNode
+            x={NODES.inferCenter.x}
+            y={NODES.inferCenter.y}
+            label="Inference"
+            isActive={isInferenceProcessing}
+            activeWorkers={inferenceActiveDisplay}
+            maxWorkers={INFERENCE_WORKERS}
+            isStressed={isStressed}
+            variant="singleton"
+            queueLen={inferenceQueueLen}
+          />
 
-        {/* --- INPUT --- */}
-        <g transform={`translate(${NODES.start.x}, ${NODES.start.y})`}>
-          <text fontSize="10" fill="#64748b" x="0" y="-25" textAnchor="middle">
-            Album
-          </text>
-          {Array.from({ length: Math.min(inputCount, 6) }).map((_, i) => (
-            <motion.rect
-              key={i}
-              x={-i * 0.5}
-              y={-i * 2}
-              width={20}
-              height={20}
-              rx={2}
-              fill="#fff"
-              stroke="#94a3b8"
-              strokeWidth={1}
-              initial={false}
-              animate={{ x: -i * 0.5, y: -i * 2, opacity: 1 }}
-              exit={{ opacity: 0, x: 20 }}
-            />
-          ))}
-        </g>
+          {/* --- INPUT --- */}
+          <g transform={`translate(${NODES.start.x}, ${NODES.start.y})`}>
+            <text fontSize="10" fill="#64748b" x="0" y="-25" textAnchor="middle">
+              Album
+            </text>
+            {Array.from({ length: Math.min(inputCount, 6) }).map((_, i) => (
+              <motion.rect
+                key={i}
+                x={-i * 0.5}
+                y={-i * 2}
+                width={20}
+                height={20}
+                rx={2}
+                fill="#fff"
+                stroke="#94a3b8"
+                strokeWidth={1}
+                initial={false}
+                animate={{ x: -i * 0.5, y: -i * 2, opacity: 1 }}
+                exit={{ opacity: 0, x: 20 }}
+              />
+            ))}
+          </g>
 
-        {/* --- OUTPUT --- */}
-        <g transform={`translate(${NODES.end.x + 10}, ${NODES.end.y - 12})`}>
-          <text fontSize="9" fill="gray" x="0" y="-8">
-            Gallery
-          </text>
-          <rect width={24} height={24} rx="4" fill="none" stroke={PIPE_COLOR_DARK} />
-          <TextOverlay x={12} y={15} text={String(completedCount)} color="#333" />
+          {/* --- OUTPUT --- */}
+          <g transform={`translate(${NODES.end.x + 10}, ${NODES.end.y - 12})`}>
+            <text fontSize="9" fill="gray" x="0" y="-8">
+              Gallery
+            </text>
+            <rect width={24} height={24} rx="4" fill="none" stroke={PIPE_COLOR_DARK} />
+            <TextOverlay x={12} y={15} text={String(completedCount)} color="#333" />
+          </g>
         </g>
       </svg>
     </Box>
@@ -319,7 +321,6 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   return (
     <g>
       <motion.path
-        layoutId={`${item.id}-glow`}
         d={path}
         pathLength={100}
         stroke="url(#packet-rainbow)"
@@ -341,7 +342,6 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
         exit={{ opacity: 0, transition: { duration: 0.1 } }}
       />
       <motion.path
-        layoutId={`${item.id}-edge`}
         d={path}
         pathLength={100}
         stroke={accent}
