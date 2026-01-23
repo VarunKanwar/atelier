@@ -19,9 +19,9 @@ export type PipelineItem = {
   label: string
 }
 
-export const SPEED_SCALE = 1.5
+export const SPEED_SCALE = 2
 
-export const INITIAL_ITEMS = 20
+export const INITIAL_ITEMS = 10
 export const PREPROCESS_DURATION = 1000 * SPEED_SCALE
 export const INFERENCE_DURATION = 1400 * SPEED_SCALE
 export const THUMB_DURATION = 1000 * SPEED_SCALE
