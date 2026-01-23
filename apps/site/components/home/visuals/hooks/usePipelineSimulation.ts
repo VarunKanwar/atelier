@@ -42,13 +42,27 @@ export const usePipelineSimulation = () => {
   const [inputCount, setInputCount] = useState(INITIAL_ITEMS)
   const [completedCount, setCompletedCount] = useState(0)
   const [cycle, setCycle] = useState(0)
+  const isVisibleRef = useRef(true)
 
   const lastEntryTime = useRef(0)
   const nextId = useRef(0)
 
   useEffect(() => {
+    if (typeof document === 'undefined') return
+    const handleVisibility = () => {
+      isVisibleRef.current = !document.hidden
+    }
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
+
+  useEffect(() => {
     const tickRate = 50
     const interval = setInterval(() => {
+      if (!isVisibleRef.current) return
       const now = Date.now()
 
       setItems(prevItems => {
