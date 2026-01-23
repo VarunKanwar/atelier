@@ -1,11 +1,15 @@
 import { Box } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
 import {
   EXIT_DURATION,
   INFERENCE_DURATION,
+  INFERENCE_WORKERS,
   type PipelineItem,
   PREPROCESS_DURATION,
+  PREPROCESS_WORKERS,
   THUMB_DURATION,
+  THUMB_WORKERS,
   TRAVEL_DURATION,
   usePipelineSimulation,
 } from './hooks/usePipelineSimulation'
@@ -24,8 +28,9 @@ const PIPE_STROKE = 'url(#pipe-gradient)'
 const PIPE_INTRO_STROKE = '#cbd5e1'
 const PIPE_COLOR_DARK = '#CBD5E1'
 const PACKET_THICKNESS = 2
-const PACKET_GLOW_THICKNESS = 4
+const PACKET_GLOW_THICKNESS = 2
 const PACKET_SEGMENT = 12
+const WORKER_STEP_MS = 220
 
 const NODES = {
   start: { x: 50, y: 150 },
@@ -71,8 +76,11 @@ export default function DefineDispatchVisual() {
   const preprocessActive = items.filter((i: PipelineItem) => i.stage === 'preprocess').length
   const thumbActive = items.filter((i: PipelineItem) => i.stage === 'thumb-process').length
   const inferenceActive = items.filter((i: PipelineItem) => i.stage === 'inference-process').length
+  const preprocessActiveDisplay = useSteppedCount(preprocessActive, WORKER_STEP_MS)
+  const thumbActiveDisplay = useSteppedCount(thumbActive, WORKER_STEP_MS)
+  const inferenceActiveDisplay = useSteppedCount(inferenceActive, WORKER_STEP_MS)
   const inferenceQueueLen = inferQueue.length
-  const isInferenceProcessing = inferenceActive > 0
+  const isInferenceProcessing = inferenceActiveDisplay > 0
   const isStressed = inferenceQueueLen > 1
 
   return (
@@ -158,15 +166,17 @@ export default function DefineDispatchVisual() {
           x={NODES.preprocess.x}
           y={NODES.preprocess.y}
           label="Preprocess"
-          isActive={preprocessActive > 0}
-          activeWorkers={preprocessActive}
+          isActive={preprocessActiveDisplay > 0}
+          activeWorkers={preprocessActiveDisplay}
+          maxWorkers={PREPROCESS_WORKERS}
         />
         <MachineNode
           x={NODES.thumbCenter.x}
           y={NODES.thumbCenter.y}
           label="Thumbnails"
-          isActive={thumbActive > 0}
-          activeWorkers={thumbActive}
+          isActive={thumbActiveDisplay > 0}
+          activeWorkers={thumbActiveDisplay}
+          maxWorkers={THUMB_WORKERS}
           variant="pool"
         />
         <MachineNode
@@ -174,7 +184,8 @@ export default function DefineDispatchVisual() {
           y={NODES.inferCenter.y}
           label="Inference"
           isActive={isInferenceProcessing}
-          activeWorkers={inferenceActive}
+          activeWorkers={inferenceActiveDisplay}
+          maxWorkers={INFERENCE_WORKERS}
           isStressed={isStressed}
           variant="singleton"
           queueLen={inferenceQueueLen}
@@ -214,6 +225,27 @@ export default function DefineDispatchVisual() {
       </svg>
     </Box>
   )
+}
+
+const useSteppedCount = (target: number, stepMs: number) => {
+  const [displayValue, setDisplayValue] = useState(target)
+
+  useEffect(() => {
+    if (displayValue === target) return
+    const timer = globalThis.setTimeout(() => {
+      setDisplayValue(current => current + (target > current ? 1 : -1))
+    }, stepMs)
+    return () => clearTimeout(timer)
+  }, [displayValue, target, stepMs])
+
+  return displayValue
+}
+
+const getCenteredSlots = (count: number, max: number) => {
+  if (max <= 0 || count <= 0) return []
+  const clamped = Math.min(count, max)
+  const start = Math.floor((max - clamped) / 2)
+  return Array.from({ length: clamped }, (_, index) => start + index)
 }
 
 function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }) {
@@ -341,6 +373,7 @@ function MachineNode({
   isStressed: _isStressed,
   variant,
   activeWorkers = 0,
+  maxWorkers = activeWorkers,
   queueLen = 0,
 }: {
   x: number
@@ -350,6 +383,7 @@ function MachineNode({
   isStressed?: boolean
   variant?: 'pool' | 'singleton'
   activeWorkers?: number
+  maxWorkers?: number
   queueLen?: number
 }) {
   // Node appearance encodes load and activity; the singleton warns on queue growth.
@@ -393,15 +427,14 @@ function MachineNode({
 
       {activeWorkers > 0 && (
         <g transform="translate(0, 6)">
-          {Array.from({ length: activeWorkers }).map((_, index) => {
+          {getCenteredSlots(activeWorkers, maxWorkers).map(slotIndex => {
             const barWidth = 4
             const barGap = 3
-            const totalWidth = activeWorkers * barWidth + (activeWorkers - 1) * barGap
-            const xOffset = -totalWidth / 2 + index * (barWidth + barGap)
+            const totalWidth = maxWorkers * barWidth + (maxWorkers - 1) * barGap
+            const xOffset = -totalWidth / 2 + slotIndex * (barWidth + barGap)
             return (
               <motion.rect
-                // biome-ignore lint/suspicious/noArrayIndexKey: stable visual ordering
-                key={index}
+                key={slotIndex}
                 x={xOffset}
                 y={-6}
                 width={barWidth}
@@ -412,7 +445,7 @@ function MachineNode({
                 transition={{
                   repeat: Infinity,
                   duration: 0.8,
-                  delay: index * 0.1,
+                  delay: slotIndex * 0.1,
                   ease: 'easeInOut',
                 }}
               />
