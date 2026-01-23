@@ -23,8 +23,9 @@ const STROKE_WIDTH_BASE = 2
 const PIPE_STROKE = 'url(#pipe-gradient)'
 const PIPE_INTRO_STROKE = '#cbd5e1'
 const PIPE_COLOR_DARK = '#CBD5E1'
-const PACKET_LENGTH = 18
 const PACKET_THICKNESS = 2
+const PACKET_GLOW_THICKNESS = 4
+const PACKET_SEGMENT = 12
 
 const NODES = {
   start: { x: 50, y: 150 },
@@ -136,7 +137,7 @@ export default function DefineDispatchVisual() {
         </g>
 
         {/* --- PACKETS --- */}
-        {/* Packets are animated along paths via CSS offset-path + offset-distance. */}
+        {/* Packets are animated as glowing path segments (dash offset). */}
         <AnimatePresence initial={false}>
           {items.map((item: PipelineItem) => {
             let queueIndex = -1
@@ -225,7 +226,6 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   let startOffset = '0%'
   let duration = 0
   let accent = '#94a3b8'
-  let width = PACKET_LENGTH
 
   if (item.stage === 'preprocess-queue') {
     path = PATHS.intro
@@ -247,7 +247,6 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     startOffset = '0%'
     // Stack queue items by backing up along the path.
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-    width = PACKET_LENGTH
     duration = TRAVEL_DURATION / 1000
   } else if (item.stage === 'thumb-process') {
     path = PATHS.thumb
@@ -279,34 +278,58 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   }
 
   const isProcess = item.stage.includes('process')
+  const startPercent = Number.parseFloat(startOffset)
+  const endPercent = Number.parseFloat(finalOffset)
+  const startDash = -startPercent
+  const endDash = -endPercent
+  const dashArray = `${PACKET_SEGMENT} ${100 - PACKET_SEGMENT}`
 
   return (
-    <motion.rect
-      layoutId={item.id}
-      initial={{ offsetDistance: startOffset, opacity: 1 }}
-      animate={{
-        offsetDistance: finalOffset,
-        stroke: accent,
-        width: width,
-        opacity: isProcess ? [1, 0.5, 1] : 1,
-      }}
-      style={{
-        offsetPath: `path("${path}")`,
-        offsetRotate: 'auto',
-        height: PACKET_THICKNESS,
-        rx: PACKET_THICKNESS / 2,
-      }}
-      fill="url(#packet-rainbow)"
-      strokeWidth={0.75}
-      filter={isProcess ? 'url(#packet-glow-strong)' : 'url(#packet-glow)'}
-      transition={{
-        duration: duration,
-        ease: 'linear',
-        opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 },
-      }}
-      // Quick fade avoids visual buildup on stage changes.
-      exit={{ opacity: 0, transition: { duration: 0.1 } }}
-    />
+    <g>
+      <motion.path
+        layoutId={`${item.id}-glow`}
+        d={path}
+        pathLength={100}
+        stroke="url(#packet-rainbow)"
+        fill="none"
+        strokeWidth={PACKET_GLOW_THICKNESS}
+        strokeLinecap="round"
+        strokeDasharray={dashArray}
+        filter={isProcess ? 'url(#packet-glow-strong)' : 'url(#packet-glow)'}
+        initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
+        animate={{
+          strokeDashoffset: endDash,
+          opacity: isProcess ? [0.9, 0.5, 0.9] : 0.9,
+        }}
+        transition={{
+          duration: duration,
+          ease: 'linear',
+          opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 },
+        }}
+        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+      />
+      <motion.path
+        layoutId={`${item.id}-edge`}
+        d={path}
+        pathLength={100}
+        stroke={accent}
+        fill="none"
+        strokeWidth={PACKET_THICKNESS}
+        strokeLinecap="round"
+        strokeDasharray={dashArray}
+        initial={{ strokeDashoffset: startDash, opacity: 1 }}
+        animate={{
+          strokeDashoffset: endDash,
+          opacity: isProcess ? [1, 0.6, 1] : 1,
+        }}
+        transition={{
+          duration: duration,
+          ease: 'linear',
+          opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 },
+        }}
+        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+      />
+    </g>
   )
 }
 
