@@ -18,7 +18,7 @@ export type PipelineItem = {
   label: string
 }
 
-export const SPEED_SCALE = 2
+export const SPEED_SCALE = 1
 
 export const INITIAL_ITEMS = 10
 export const PREPROCESS_DURATION = 1000 * SPEED_SCALE
