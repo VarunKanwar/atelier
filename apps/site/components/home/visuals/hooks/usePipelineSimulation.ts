@@ -26,6 +26,7 @@ export const PREPROCESS_WORKERS = 4
 export const THUMB_WORKERS = 4
 export const INFERENCE_WORKERS = 1
 export const ENTRY_INTERVAL = 400 
+export const TRAVEL_DURATION = 500 // Min time to travel along the edge
 
 export const usePipelineSimulation = () => {
   const [items, setItems] = useState<PipelineItem[]>([])
@@ -36,7 +37,7 @@ export const usePipelineSimulation = () => {
   const nextId = useRef(0)
 
   useEffect(() => {
-    const tickRate = 50 // Higher resolution for smoother transitions
+    const tickRate = 50 
     const interval = setInterval(() => {
       const now = Date.now()
       
@@ -44,7 +45,8 @@ export const usePipelineSimulation = () => {
         let newItems: PipelineItem[] = []
         let hasChanges = false
 
-        // 1. ENTRY LOGIC
+        // --- 1. NEW ITEM ENTRY ---
+        // Spawns new items into Preprocess at a set interval
         if (inputCount > 0 && now - lastEntryTime.current > ENTRY_INTERVAL) {
            const inPreprocess = prevItems.filter(i => i.stage === 'preprocess').length
            if (inPreprocess < PREPROCESS_WORKERS && nextId.current < INITIAL_ITEMS) {
@@ -63,13 +65,16 @@ export const usePipelineSimulation = () => {
            }
         }
 
-        // 2. STATE TRANSITIONS
+        // --- 2. STATE MACHINE TRANSITIONS ---
+        // Handles movement between stages based on duration and worker availability
         const processedItems = prevItems.map(item => {
            let nextItem = { ...item }
+           const elapsed = now - item.enteredStageAt
            
-           if (item.stage === 'preprocess' && now - item.enteredStageAt > PREPROCESS_DURATION) {
+           // Preprocess -> Split
+           if (item.stage === 'preprocess' && elapsed > PREPROCESS_DURATION) {
                  hasChanges = true
-                 // Transform to Inference
+                 // Transform to Inference Packet
                  nextItem = {
                     ...item,
                     id: `${item.originalId}-infer`,
@@ -77,7 +82,7 @@ export const usePipelineSimulation = () => {
                     stage: 'inference-queue' as PipelineStage,
                     enteredStageAt: now
                  }
-                 // Spawn Thumb buddy
+                 // Spawn Thumbnail Packet
                  newItems.push({
                     originalId: item.originalId,
                     id: `${item.originalId}-thumb`,
@@ -89,31 +94,45 @@ export const usePipelineSimulation = () => {
                  return nextItem
             }
             
+            // Inference Queue -> Process
+            // Enforce TRAVEL_DURATION to allow visual traversal along the edge
             if (item.stage === 'inference-queue') {
                  const activeWorkers = prevItems.filter(i => i.stage === 'inference-process').length
                  const queue = prevItems.filter(i => i.stage === 'inference-queue').sort((a,b) => a.enteredStageAt - b.enteredStageAt)
-                 if (activeWorkers < INFERENCE_WORKERS && queue[0]?.id === item.id) {
+                 
+                 const canProcess = activeWorkers < INFERENCE_WORKERS && queue[0]?.id === item.id
+                 const hasTraveled = elapsed > TRAVEL_DURATION
+
+                 if (canProcess && hasTraveled) {
                     hasChanges = true
                     return { ...item, stage: 'inference-process' as PipelineStage, enteredStageAt: now }
                  }
             }
             
-            if (item.stage === 'inference-process' && now - item.enteredStageAt > INFERENCE_DURATION) {
+            // Inference Process -> Done
+            if (item.stage === 'inference-process' && elapsed > INFERENCE_DURATION) {
                  hasChanges = true
                  setCompletedCount(c => c + 0.5)
                  return { ...item, stage: 'done' as PipelineStage, enteredStageAt: now }
             }
             
+            // Thumbnail Queue -> Process
+            // Enforce TRAVEL_DURATION so items don't teleport if workers are free
             if (item.stage === 'thumb-queue') {
                  const activeWorkers = prevItems.filter(i => i.stage === 'thumb-process').length
                  const queue = prevItems.filter(i => i.stage === 'thumb-queue').sort((a,b) => a.enteredStageAt - b.enteredStageAt)
-                 if (activeWorkers < THUMB_WORKERS && queue[0]?.id === item.id) {
+                 
+                 const canProcess = activeWorkers < THUMB_WORKERS && queue[0]?.id === item.id
+                 const hasTraveled = elapsed > TRAVEL_DURATION
+
+                 if (canProcess && hasTraveled) {
                     hasChanges = true
                     return { ...item, stage: 'thumb-process' as PipelineStage, enteredStageAt: now }
                  }
             }
             
-            if (item.stage === 'thumb-process' && now - item.enteredStageAt > THUMB_DURATION) {
+            // Thumbnail Process -> Done
+            if (item.stage === 'thumb-process' && elapsed > THUMB_DURATION) {
                  hasChanges = true
                  setCompletedCount(c => c + 0.5)
                  return { ...item, stage: 'done' as PipelineStage, enteredStageAt: now }
@@ -122,11 +141,12 @@ export const usePipelineSimulation = () => {
             return item
         })
 
-        // 3. CLEANUP
-        // Remove done items after they have had time to animate out (e.g., 500ms)
+        // --- 3. CLEANUP & LOOP ---
+        // Remove completed items and trigger auto-restart logic
         const finalItems = [...processedItems, ...newItems].filter(item => {
+           // Allow 'done' items to animate off-screen before removal
            if (item.stage === 'done') {
-              if (now - item.enteredStageAt > 600) return false // Remove after 600ms
+              if (now - item.enteredStageAt > 1000) return false 
            }
            return true
         })
@@ -139,6 +159,19 @@ export const usePipelineSimulation = () => {
     
     return () => clearInterval(interval)
   }, [inputCount])
+  
+  // Separate Effect for Auto-Loop to avoid side-effects in the tick
+  useEffect(() => {
+     if (inputCount === 0 && items.length === 0) {
+        const timer = setTimeout(() => {
+           // RESET SIMULATION
+           setInputCount(INITIAL_ITEMS)
+           setCompletedCount(0)
+           nextId.current = 0 // Critical: Reset ID counter so new items can spawn
+        }, 1500) 
+        return () => clearTimeout(timer)
+     }
+  }, [inputCount, items.length])
 
   return {
     items,
