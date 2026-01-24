@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 export type PipelineStage =
   | 'start'
+  | 'preprocess-queue'
   | 'preprocess'
   | 'inference-queue'
   | 'inference-process'
@@ -18,17 +19,25 @@ export type PipelineItem = {
   label: string
 }
 
+export const SPEED_SCALE = 1.5
+
 export const INITIAL_ITEMS = 20
-export const PREPROCESS_DURATION = 1000
-export const INFERENCE_DURATION = 1400
-export const THUMB_DURATION = 1000
+export const PREPROCESS_DURATION = 1000 * SPEED_SCALE
+export const INFERENCE_DURATION = 1400 * SPEED_SCALE
+export const THUMB_DURATION = 1000 * SPEED_SCALE
 export const PREPROCESS_WORKERS = 4
 export const THUMB_WORKERS = 4
 export const INFERENCE_WORKERS = 1
-export const ENTRY_INTERVAL = 400
-export const TRAVEL_DURATION = 500 // Min time to travel along the edge
+export const ENTRY_INTERVAL = 400 * SPEED_SCALE
+export const TRAVEL_DURATION = 500 * SPEED_SCALE // Minimum traversal time to keep motion legible.
+export const EXIT_DURATION = 800 * SPEED_SCALE
 
-// Tick-based simulation for the hero pipeline visual (not a real scheduler).
+/*
+ * Intent: feed the hero animation with a simple, deterministic workflow model.
+ * This models a DAG with fan-out, queueing, and a singleton bottleneck so the
+ * visual reads like orchestration rather than a decorative animation.
+ * It is illustrative, not a production scheduler.
+ */
 export const usePipelineSimulation = () => {
   const [items, setItems] = useState<PipelineItem[]>([])
   const [inputCount, setInputCount] = useState(INITIAL_ITEMS)
@@ -47,16 +56,15 @@ export const usePipelineSimulation = () => {
         let hasChanges = false
 
         // --- 1. NEW ITEM ENTRY ---
-        // Spawn items into preprocess, capped by worker capacity.
+        // Spawn items into the preprocess queue at a steady cadence.
         if (inputCount > 0 && now - lastEntryTime.current > ENTRY_INTERVAL) {
-          const inPreprocess = prevItems.filter(i => i.stage === 'preprocess').length
-          if (inPreprocess < PREPROCESS_WORKERS && nextId.current < INITIAL_ITEMS) {
+          if (nextId.current < INITIAL_ITEMS) {
             const id = nextId.current++
             newItems.push({
               id: String(id),
               originalId: id,
               type: 'main',
-              stage: 'preprocess' as PipelineStage,
+              stage: 'preprocess-queue' as PipelineStage,
               enteredStageAt: now,
               label: `img-${id}`,
             })
@@ -71,6 +79,22 @@ export const usePipelineSimulation = () => {
         const processedItems = prevItems.map(item => {
           let nextItem = { ...item }
           const elapsed = now - item.enteredStageAt
+
+          // Preprocess Queue -> Process
+          if (item.stage === 'preprocess-queue') {
+            const activeWorkers = prevItems.filter(i => i.stage === 'preprocess').length
+            const queue = prevItems
+              .filter(i => i.stage === 'preprocess-queue')
+              .sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+
+            const canProcess = activeWorkers < PREPROCESS_WORKERS && queue[0]?.id === item.id
+            const hasTraveled = elapsed > TRAVEL_DURATION
+
+            if (canProcess && hasTraveled) {
+              hasChanges = true
+              return { ...item, stage: 'preprocess' as PipelineStage, enteredStageAt: now }
+            }
+          }
 
           // Preprocess -> Split
           if (item.stage === 'preprocess' && elapsed > PREPROCESS_DURATION) {
@@ -153,7 +177,7 @@ export const usePipelineSimulation = () => {
         const finalItems = [...processedItems, ...newItems].filter(item => {
           // Allow done items to animate off-screen before removal.
           if (item.stage === 'done') {
-            if (now - item.enteredStageAt > 1000) return false
+            if (now - item.enteredStageAt > EXIT_DURATION) return false
           }
           return true
         })
