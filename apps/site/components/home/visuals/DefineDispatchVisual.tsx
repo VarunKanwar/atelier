@@ -5,6 +5,7 @@ import {
   EXIT_DURATION,
   INFERENCE_DURATION,
   INFERENCE_WORKERS,
+  INITIAL_ITEMS,
   type PipelineItem,
   PREPROCESS_DURATION,
   PREPROCESS_WORKERS,
@@ -32,6 +33,13 @@ const PACKET_GLOW_THICKNESS = 2
 const PACKET_LENGTH_PX = 20
 const WORKER_STEP_MS = 220
 const CURVE_BEND = 30
+// Isometric stack: each paper shifts diagonally as it stacks
+const PHOTO_STACK_OFFSET_X = 0
+const PHOTO_STACK_OFFSET_Y = -3.5
+const PHOTO_STACK_PADDING = 8
+const PHOTO_SKEW_DEG = 20 // Positive skew: edge/corner faces viewer
+const PHOTO_BORDER_IDLE = '#cbd5e1'
+const PHOTO_BORDER_DONE = '#86efac'
 
 const NODES = {
   start: { x: 45, y: 150, width: 80, height: 80, radius: 10 },
@@ -62,7 +70,7 @@ const PATHS = {
 }
 
 export default function DefineDispatchVisual() {
-  const { items, inputCount, completedCount, cycle } = usePipelineSimulation()
+  const { items, completedCount, cycle } = usePipelineSimulation()
   const pathLengths = usePathLengths(PATHS)
 
   // Pre-calculate queues
@@ -168,54 +176,48 @@ export default function DefineDispatchVisual() {
           </AnimatePresence>
 
           {/* --- NODES --- */}
-        <MachineNode
-          x={NODES.preprocess.x}
-          y={NODES.preprocess.y}
-          width={NODES.preprocess.width}
-          height={NODES.preprocess.height}
-          radius={NODES.preprocess.radius}
-          label="Preprocess"
-          isActive={preprocessActiveDisplay > 0}
-          activeWorkers={preprocessActiveDisplay}
-          maxWorkers={PREPROCESS_WORKERS}
-        />
-        <MachineNode
-          x={NODES.thumbCenter.x}
-          y={NODES.thumbCenter.y}
-          width={NODES.thumbCenter.width}
-          height={NODES.thumbCenter.height}
-          radius={NODES.thumbCenter.radius}
-          label="Thumbnails"
-          isActive={thumbActiveDisplay > 0}
-          activeWorkers={thumbActiveDisplay}
-          maxWorkers={THUMB_WORKERS}
-          variant="pool"
-        />
-        <MachineNode
-          x={NODES.inferCenter.x}
-          y={NODES.inferCenter.y}
-          width={NODES.inferCenter.width}
-          height={NODES.inferCenter.height}
-          radius={NODES.inferCenter.radius}
-          label="Inference"
-          isActive={isInferenceProcessing}
-          activeWorkers={inferenceActiveDisplay}
-          maxWorkers={INFERENCE_WORKERS}
-          variant="singleton"
-          queueLen={inferenceQueueLen}
-        />
+          <MachineNode
+            x={NODES.preprocess.x}
+            y={NODES.preprocess.y}
+            width={NODES.preprocess.width}
+            height={NODES.preprocess.height}
+            radius={NODES.preprocess.radius}
+            label="Preprocess"
+            isActive={preprocessActiveDisplay > 0}
+            activeWorkers={preprocessActiveDisplay}
+            maxWorkers={PREPROCESS_WORKERS}
+          />
+          <MachineNode
+            x={NODES.thumbCenter.x}
+            y={NODES.thumbCenter.y}
+            width={NODES.thumbCenter.width}
+            height={NODES.thumbCenter.height}
+            radius={NODES.thumbCenter.radius}
+            label="Thumbnails"
+            isActive={thumbActiveDisplay > 0}
+            activeWorkers={thumbActiveDisplay}
+            maxWorkers={THUMB_WORKERS}
+            variant="pool"
+          />
+          <MachineNode
+            x={NODES.inferCenter.x}
+            y={NODES.inferCenter.y}
+            width={NODES.inferCenter.width}
+            height={NODES.inferCenter.height}
+            radius={NODES.inferCenter.radius}
+            label="Inference"
+            isActive={isInferenceProcessing}
+            activeWorkers={inferenceActiveDisplay}
+            maxWorkers={INFERENCE_WORKERS}
+            variant="singleton"
+            queueLen={inferenceQueueLen}
+          />
 
           {/* --- INPUT --- */}
           <g
             transform={`translate(${NODES.start.x - NODES.start.width / 2}, ${NODES.start.y - NODES.start.height / 2})`}
           >
-            <text
-              fontSize="10"
-              fill="#64748b"
-              x={NODES.start.width / 2}
-              y="-8"
-              textAnchor="middle"
-            >
+            <text fontSize="10" fill="#64748b" x={NODES.start.width / 2} y="-8" textAnchor="middle">
               Album
             </text>
             <rect
@@ -225,11 +227,12 @@ export default function DefineDispatchVisual() {
               fill="#fff"
               stroke={PIPE_COLOR_DARK}
             />
-            <TextOverlay
-              x={NODES.start.width / 2}
-              y={NODES.start.height / 2 + 4}
-              text={String(inputCount)}
-              color="#333"
+            <PhotoStack
+              containerWidth={NODES.start.width}
+              containerHeight={NODES.start.height}
+              count={INITIAL_ITEMS}
+              completedCount={completedCount}
+              radius={NODES.start.radius}
             />
           </g>
 
@@ -237,13 +240,7 @@ export default function DefineDispatchVisual() {
           <g
             transform={`translate(${NODES.end.x - NODES.end.width / 2}, ${NODES.end.y - NODES.end.height / 2})`}
           >
-            <text
-              fontSize="9"
-              fill="gray"
-              x={NODES.end.width / 2}
-              y="-8"
-              textAnchor="middle"
-            >
+            <text fontSize="9" fill="gray" x={NODES.end.width / 2} y="-8" textAnchor="middle">
               Gallery
             </text>
             <rect
@@ -530,7 +527,6 @@ function MachineNode({
           })}
         </g>
       )}
-
     </g>
   )
 }
@@ -548,5 +544,67 @@ function TextOverlay({ x, y, text, color }: { x: number; y: number; text: string
     >
       {text}
     </text>
+  )
+}
+
+function PhotoStack({
+  containerWidth,
+  containerHeight,
+  count,
+  completedCount,
+  radius,
+}: {
+  containerWidth: number
+  containerHeight: number
+  count: number
+  completedCount: number
+  radius: number
+}) {
+  const stackCount = Math.max(1, count)
+
+  // Calculate total offset needed for the full stack
+  const totalOffsetX = (stackCount - 1) * Math.abs(PHOTO_STACK_OFFSET_X)
+  const totalOffsetY = (stackCount - 1) * Math.abs(PHOTO_STACK_OFFSET_Y)
+
+  // Account for skew shift (skewX shifts points based on their Y position)
+  const skewRad = (PHOTO_SKEW_DEG * Math.PI) / 180
+  const paperHeight = containerHeight - PHOTO_STACK_PADDING * 2 - totalOffsetY
+  const skewShift = Math.abs(Math.tan(skewRad) * paperHeight)
+
+  // Paper dimensions accounting for padding, stack spread, and skew
+  const paperWidth = containerWidth - PHOTO_STACK_PADDING * 2 - totalOffsetX - skewShift
+
+  // Base position: bottom paper starts offset to account for stack growth
+  // Skew compensation keeps the visual centered in the container
+  const baseX = PHOTO_STACK_PADDING + Math.abs(totalOffsetX)
+  const baseY = PHOTO_STACK_PADDING + totalOffsetY
+
+  return (
+    <g>
+      {Array.from({ length: stackCount }).map((_, i) => {
+        // Each paper shifts up and left as we go up the stack
+        const x = baseX + i * PHOTO_STACK_OFFSET_X
+        const y = baseY + i * PHOTO_STACK_OFFSET_Y
+        const stroke = completedCount > stackCount - 1 - i ? PHOTO_BORDER_DONE : PHOTO_BORDER_IDLE
+
+        return (
+          <g
+            // biome-ignore lint/suspicious/noArrayIndexKey: static stack, no reordering
+            key={i}
+            transform={`translate(${x}, ${y}) skewX(${PHOTO_SKEW_DEG})`}
+          >
+            <rect
+              x={0}
+              y={0}
+              width={paperWidth}
+              height={paperHeight}
+              rx={Math.max(2, radius - 4)}
+              fill="#fff"
+              stroke={stroke}
+            />
+          </g>
+        )
+      })}
+    </g>
   )
 }
