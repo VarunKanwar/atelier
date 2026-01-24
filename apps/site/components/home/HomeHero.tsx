@@ -100,7 +100,8 @@ const HomeHero = ({ docsHref, exploreHref, githubHref }: HomeHeroProps) => {
             {/* The missing runtime for browser compute */}
           </Text>
           <Text fontSize={{ base: 'lg', md: 'xl' }} color="gray.600" maxW="480px">
-            Backpressure, cancellation, crash recovery, and observability for your browser-based workloads.
+            Backpressure, cancellation, crash recovery, and observability for your browser-based
+            workloads.
             {/* Handles backpressure, cancellation, crash recovery, and observability so you don't have to. */}
           </Text>
           <HStack gap={3} flexWrap="wrap">
