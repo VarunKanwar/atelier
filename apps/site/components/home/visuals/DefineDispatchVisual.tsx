@@ -25,20 +25,20 @@ import {
  */
 
 // Layout anchors for the pipeline diagram in SVG coordinate space.
-const STROKE_WIDTH_BASE = 2
+const STROKE_WIDTH_BASE = 1.25
 const PIPE_STROKE = 'url(#pipe-gradient)'
 const COLORS = {
   pipe: {
     intro: '#cbd5e1',
     dark: '#CBD5E1',
-    gradientMid: '#a5b4fc',
+    gradientMid: '#9CA3AF',
   },
   packet: {
-    preprocess: '#38bdf8',
-    thumbQueue: '#a78bfa',
-    thumbProcess: '#60a5fa',
-    inferenceQueue: '#fbbf24',
-    inferenceProcess: '#f43f5e',
+    preprocess: '#111827',
+    thumbQueue: '#9CA3AF',
+    thumbProcess: '#0B0F14',
+    inferenceQueue: '#9CA3AF',
+    inferenceProcess: '#111827',
     rainbowStops: ['#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#facc15'],
   },
   node: {
@@ -46,24 +46,24 @@ const COLORS = {
     label: '#64748b',
     count: '#333',
     idleStroke: '#CBD5E1',
-    active: '#3b82f6',
-    poolActive: '#8b5cf6',
-    warnFill: '#fef08a',
-    dangerFill: '#fecaca',
-    warnStroke: '#eab308',
-    dangerStroke: '#ef4444',
+    active: '#111827',
+    poolActive: '#0B0F14',
+    warnFill: '#fff',
+    dangerFill: '#fff',
+    warnStroke: '#D6A896',
+    dangerStroke: '#C58B78',
   },
   photo: {
     idle: '#cbd5e1',
-    done: '#86efac',
+    done: '#9CA3AF',
   },
 } as const
 
 const PIPE_INTRO_STROKE = COLORS.pipe.intro
 const PIPE_COLOR_DARK = COLORS.pipe.dark
-const PACKET_THICKNESS = 2
-const PACKET_GLOW_THICKNESS = 2
-const PACKET_LENGTH_PX = 20
+const PACKET_THICKNESS = 1
+const PACKET_GLOW_THICKNESS = 1.5
+const PACKET_LENGTH_PX = 28
 const WORKER_STEP_MS = 220
 const CURVE_BEND = 30
 // Isometric stack: each paper shifts diagonally as it stacks
@@ -223,14 +223,7 @@ export default function DefineDispatchVisual() {
             ))}
           </linearGradient>
           <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="2.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="packet-glow-strong" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feGaussianBlur stdDeviation="2" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -443,7 +436,7 @@ function Packet({
         strokeWidth={PACKET_GLOW_THICKNESS}
         strokeLinecap="round"
         strokeDasharray={dashArray}
-        filter={isProcess ? 'url(#packet-glow-strong)' : 'url(#packet-glow)'}
+        filter="url(#packet-glow)"
         initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
         animate={{
           strokeDashoffset: endDash,
@@ -535,7 +528,7 @@ function MachineNode({
         rx={radius}
         fill={fillColor}
         stroke={strokeColor}
-        strokeWidth={isActive || queueLen > 0 ? 2 : 1.5}
+        strokeWidth={isActive || queueLen > 0 ? 1.25 : 1}
         animate={{ fill: fillColor, stroke: strokeColor }}
         transition={{ duration: 0.3 }}
       />
