@@ -7,6 +7,7 @@ import {
   INFERENCE_WORKERS,
   INITIAL_ITEMS,
   type PipelineItem,
+  type PipelineStage,
   PREPROCESS_DURATION,
   PREPROCESS_WORKERS,
   THUMB_DURATION,
@@ -26,8 +27,40 @@ import {
 // Layout anchors for the pipeline diagram in SVG coordinate space.
 const STROKE_WIDTH_BASE = 2
 const PIPE_STROKE = 'url(#pipe-gradient)'
-const PIPE_INTRO_STROKE = '#cbd5e1'
-const PIPE_COLOR_DARK = '#CBD5E1'
+const COLORS = {
+  pipe: {
+    intro: '#cbd5e1',
+    dark: '#CBD5E1',
+    gradientMid: '#a5b4fc',
+  },
+  packet: {
+    preprocess: '#38bdf8',
+    thumbQueue: '#a78bfa',
+    thumbProcess: '#60a5fa',
+    inferenceQueue: '#fbbf24',
+    inferenceProcess: '#f43f5e',
+    rainbowStops: ['#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#facc15'],
+  },
+  node: {
+    surface: '#fff',
+    label: '#64748b',
+    count: '#333',
+    idleStroke: '#CBD5E1',
+    active: '#3b82f6',
+    poolActive: '#8b5cf6',
+    warnFill: '#fef08a',
+    dangerFill: '#fecaca',
+    warnStroke: '#eab308',
+    dangerStroke: '#ef4444',
+  },
+  photo: {
+    idle: '#cbd5e1',
+    done: '#86efac',
+  },
+} as const
+
+const PIPE_INTRO_STROKE = COLORS.pipe.intro
+const PIPE_COLOR_DARK = COLORS.pipe.dark
 const PACKET_THICKNESS = 2
 const PACKET_GLOW_THICKNESS = 2
 const PACKET_LENGTH_PX = 20
@@ -38,8 +71,8 @@ const PHOTO_STACK_OFFSET_X = 0
 const PHOTO_STACK_OFFSET_Y = -3.5
 const PHOTO_STACK_PADDING = 8
 const PHOTO_SKEW_DEG = 20 // Positive skew: edge/corner faces viewer
-const PHOTO_BORDER_IDLE = '#cbd5e1'
-const PHOTO_BORDER_DONE = '#86efac'
+const PHOTO_BORDER_IDLE = COLORS.photo.idle
+const PHOTO_BORDER_DONE = COLORS.photo.done
 
 const NODES = {
   start: { x: 45, y: 150, width: 80, height: 80, radius: 10 },
@@ -67,6 +100,68 @@ const PATHS = {
   thumbExit: `M ${edgeX(NODES.thumbCenter, 'right')} ${NODES.thumbCenter.y} C ${edgeX(NODES.thumbCenter, 'right') + CURVE_BEND} ${NODES.thumbCenter.y}, ${edgeX(NODES.end, 'left') - CURVE_BEND} ${NODES.end.y}, ${edgeX(NODES.end, 'left')} ${NODES.end.y}`,
 
   inferExit: `M ${edgeX(NODES.inferCenter, 'right')} ${NODES.inferCenter.y} C ${edgeX(NODES.inferCenter, 'right') + CURVE_BEND} ${NODES.inferCenter.y}, ${edgeX(NODES.end, 'left') - CURVE_BEND} ${NODES.end.y}, ${edgeX(NODES.end, 'left')} ${NODES.end.y}`,
+}
+
+type StageVisualConfig = {
+  pathKey: keyof typeof PATHS | ((item: PipelineItem) => keyof typeof PATHS)
+  accent: string | ((item: PipelineItem) => string)
+  durationMs: number
+  startOffset?: string
+  endOffset?: string
+  queueOffset?: (queueIndex: number) => string
+}
+
+const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
+  'preprocess-queue': {
+    pathKey: 'intro',
+    accent: COLORS.packet.preprocess,
+    durationMs: TRAVEL_DURATION,
+    startOffset: '0%',
+    queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
+  },
+  preprocess: {
+    pathKey: 'intro',
+    accent: COLORS.packet.preprocess,
+    durationMs: PREPROCESS_DURATION,
+    startOffset: '95%',
+    endOffset: '95%',
+  },
+  'thumb-queue': {
+    pathKey: 'thumb',
+    accent: COLORS.packet.thumbQueue,
+    durationMs: TRAVEL_DURATION,
+    startOffset: '0%',
+    queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
+  },
+  'thumb-process': {
+    pathKey: 'thumb',
+    accent: COLORS.packet.thumbProcess,
+    durationMs: THUMB_DURATION,
+    startOffset: '95%',
+    endOffset: '95%',
+  },
+  'inference-queue': {
+    pathKey: 'infer',
+    accent: COLORS.packet.inferenceQueue,
+    durationMs: TRAVEL_DURATION,
+    startOffset: '0%',
+    queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
+  },
+  'inference-process': {
+    pathKey: 'infer',
+    accent: COLORS.packet.inferenceProcess,
+    durationMs: INFERENCE_DURATION,
+    startOffset: '95%',
+    endOffset: '95%',
+  },
+  done: {
+    pathKey: item => (item.type === 'thumb' ? 'thumbExit' : 'inferExit'),
+    accent: item =>
+      item.type === 'thumb' ? COLORS.packet.thumbProcess : COLORS.packet.inferenceProcess,
+    durationMs: EXIT_DURATION,
+    startOffset: '0%',
+    endOffset: '100%',
+  },
 }
 
 export default function DefineDispatchVisual() {
@@ -113,17 +208,19 @@ export default function DefineDispatchVisual() {
       >
         <defs>
           <linearGradient id="pipe-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#cbd5e1" />
-            <stop offset="50%" stopColor="#a5b4fc" />
-            <stop offset="100%" stopColor="#cbd5e1" />
+            <stop offset="0%" stopColor={COLORS.pipe.intro} />
+            <stop offset="50%" stopColor={COLORS.pipe.gradientMid} />
+            <stop offset="100%" stopColor={COLORS.pipe.intro} />
           </linearGradient>
           <linearGradient id="packet-rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#22d3ee" />
-            <stop offset="20%" stopColor="#3b82f6" />
-            <stop offset="40%" stopColor="#8b5cf6" />
-            <stop offset="60%" stopColor="#ec4899" />
-            <stop offset="80%" stopColor="#f97316" />
-            <stop offset="100%" stopColor="#facc15" />
+            {COLORS.packet.rainbowStops.map((color, index) => (
+              <stop
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable array for static gradient.
+                key={index}
+                offset={`${(index / (COLORS.packet.rainbowStops.length - 1)) * 100}%`}
+                stopColor={color}
+              />
+            ))}
           </linearGradient>
           <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -217,14 +314,20 @@ export default function DefineDispatchVisual() {
           <g
             transform={`translate(${NODES.start.x - NODES.start.width / 2}, ${NODES.start.y - NODES.start.height / 2})`}
           >
-            <text fontSize="10" fill="#64748b" x={NODES.start.width / 2} y="-8" textAnchor="middle">
+            <text
+              fontSize="10"
+              fill={COLORS.node.label}
+              x={NODES.start.width / 2}
+              y="-8"
+              textAnchor="middle"
+            >
               Album
             </text>
             <rect
               width={NODES.start.width}
               height={NODES.start.height}
               rx={NODES.start.radius}
-              fill="#fff"
+              fill={COLORS.node.surface}
               stroke={PIPE_COLOR_DARK}
             />
             <PhotoStack
@@ -247,14 +350,14 @@ export default function DefineDispatchVisual() {
               width={NODES.end.width}
               height={NODES.end.height}
               rx={NODES.end.radius}
-              fill="#fff"
+              fill={COLORS.node.surface}
               stroke={PIPE_COLOR_DARK}
             />
             <TextOverlay
               x={NODES.end.width / 2}
               y={NODES.end.height / 2 + 4}
               text={String(completedCount)}
-              color="#333"
+              color={COLORS.node.count}
             />
           </g>
         </g>
@@ -310,73 +413,15 @@ function Packet({
   queueIndex: number
   pathLengths: Record<string, number>
 }) {
-  // Used to select the correct exit path once the item completes.
-  const isThumb = item.type === 'thumb'
-
-  // Stage → motion recipe (path, offsets, duration, accent).
-  let pathKey: keyof typeof PATHS = 'intro'
-  let path = ''
-  let finalOffset = '100%'
-  let startOffset = '0%'
-  let duration = 0
-  let accent = '#94a3b8'
-
-  if (item.stage === 'preprocess-queue') {
-    pathKey = 'intro'
-    path = PATHS.intro
-    duration = TRAVEL_DURATION / 1000
-    accent = '#38bdf8'
-    startOffset = '0%'
-    // Stack queue items by backing up along the path.
-    finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-  } else if (item.stage === 'preprocess') {
-    pathKey = 'intro'
-    path = PATHS.intro
-    duration = PREPROCESS_DURATION / 1000
-    accent = '#38bdf8'
-    // Hold at the worker node while processing.
-    startOffset = '95%'
-    finalOffset = '95%'
-  } else if (item.stage === 'thumb-queue') {
-    pathKey = 'thumb'
-    path = PATHS.thumb
-    accent = '#a78bfa'
-    startOffset = '0%'
-    // Stack queue items by backing up along the path.
-    finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-    duration = TRAVEL_DURATION / 1000
-  } else if (item.stage === 'thumb-process') {
-    pathKey = 'thumb'
-    path = PATHS.thumb
-    accent = '#60a5fa'
-    // Hold at the worker node while processing.
-    startOffset = '95%'
-    finalOffset = '95%'
-    duration = THUMB_DURATION / 1000
-  } else if (item.stage === 'inference-queue') {
-    pathKey = 'infer'
-    path = PATHS.infer
-    accent = '#fbbf24'
-    startOffset = '0%'
-    // Stack queue items by backing up along the path.
-    finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
-    duration = TRAVEL_DURATION / 1000
-  } else if (item.stage === 'inference-process') {
-    pathKey = 'infer'
-    path = PATHS.infer
-    accent = '#f43f5e'
-    // Hold at the worker node while processing.
-    startOffset = '95%'
-    finalOffset = '95%'
-    duration = INFERENCE_DURATION / 1000
-  } else if (item.stage === 'done') {
-    pathKey = isThumb ? 'thumbExit' : 'inferExit'
-    path = isThumb ? PATHS.thumbExit : PATHS.inferExit
-    accent = isThumb ? '#60a5fa' : '#f43f5e'
-    startOffset = '0%'
-    finalOffset = '100%'
-    duration = EXIT_DURATION / 1000
-  }
+  const config = STAGE_VISUALS[item.stage]
+  const pathKey = typeof config.pathKey === 'function' ? config.pathKey(item) : config.pathKey
+  const path = PATHS[pathKey]
+  const accent = typeof config.accent === 'function' ? config.accent(item) : config.accent
+  const startOffset = config.startOffset ?? '0%'
+  const finalOffset = config.queueOffset
+    ? config.queueOffset(queueIndex)
+    : (config.endOffset ?? '100%')
+  const duration = config.durationMs / 1000
 
   const isProcess = item.stage.includes('process')
   const lengthPx = pathLengths[pathKey] ?? 100
@@ -461,22 +506,22 @@ function MachineNode({
   queueLen?: number
 }) {
   // Node appearance encodes load and activity; the singleton warns on queue growth.
-  let fillColor = '#fff'
-  let strokeColor = '#CBD5E1'
+  let fillColor = COLORS.node.surface
+  let strokeColor = COLORS.node.idleStroke
 
   if (variant === 'singleton') {
     if (queueLen > 4)
-      fillColor = '#fecaca' // Light Red
-    else if (queueLen > 2) fillColor = '#fef08a' // Light Yellow
+      fillColor = COLORS.node.dangerFill // Light Red
+    else if (queueLen > 2) fillColor = COLORS.node.warnFill // Light Yellow
 
-    if (queueLen > 4) strokeColor = '#ef4444'
-    else if (queueLen > 2) strokeColor = '#eab308'
-    else if (isActive) strokeColor = '#3b82f6'
+    if (queueLen > 4) strokeColor = COLORS.node.dangerStroke
+    else if (queueLen > 2) strokeColor = COLORS.node.warnStroke
+    else if (isActive) strokeColor = COLORS.node.active
   } else if (variant === 'pool') {
-    if (isActive) strokeColor = '#8b5cf6'
+    if (isActive) strokeColor = COLORS.node.poolActive
   } else {
     // Preprocess
-    if (isActive) strokeColor = '#3b82f6'
+    if (isActive) strokeColor = COLORS.node.active
   }
 
   return (
@@ -495,7 +540,7 @@ function MachineNode({
         transition={{ duration: 0.3 }}
       />
 
-      <text y="40" fontSize="10" textAnchor="middle" fill="#64748b" fontWeight="medium">
+      <text y="40" fontSize="10" textAnchor="middle" fill={COLORS.node.label} fontWeight="medium">
         {label}
       </text>
 
@@ -599,7 +644,7 @@ function PhotoStack({
               width={paperWidth}
               height={paperHeight}
               rx={Math.max(2, radius - 4)}
-              fill="#fff"
+              fill={COLORS.node.surface}
               stroke={stroke}
             />
           </g>
