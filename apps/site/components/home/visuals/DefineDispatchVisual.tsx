@@ -31,13 +31,13 @@ const PACKET_THICKNESS = 2
 const PACKET_GLOW_THICKNESS = 2
 const PACKET_LENGTH_PX = 20
 const WORKER_STEP_MS = 220
-const CURVE_BEND = 80
+const CURVE_BEND = 30
 
 const NODES = {
   start: { x: 45, y: 150, width: 80, height: 80, radius: 10 },
   preprocess: { x: 160, y: 150, width: 48, height: 32, radius: 6 },
-  thumbCenter: { x: 300, y: 70, width: 48, height: 32, radius: 6 },
-  inferCenter: { x: 300, y: 230, width: 48, height: 32, radius: 6 },
+  thumbCenter: { x: 280, y: 90, width: 48, height: 32, radius: 6 },
+  inferCenter: { x: 280, y: 210, width: 48, height: 32, radius: 6 },
   end: { x: 440, y: 150, width: 80, height: 80, radius: 10 },
 }
 
@@ -84,7 +84,6 @@ export default function DefineDispatchVisual() {
   const inferenceActiveDisplay = useSteppedCount(inferenceActive, WORKER_STEP_MS)
   const inferenceQueueLen = inferQueue.length
   const isInferenceProcessing = inferenceActiveDisplay > 0
-  const isStressed = inferenceQueueLen > 1
 
   return (
     <Box
@@ -132,10 +131,6 @@ export default function DefineDispatchVisual() {
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-          <filter id="glow-basic" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
         </defs>
 
         {/* --- DAG EDGES (Static Pipes) --- */}
@@ -161,16 +156,16 @@ export default function DefineDispatchVisual() {
                 queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
               }
 
-            return (
-              <Packet
-                key={`${item.id}-${item.stage}`}
-                item={item}
-                queueIndex={queueIndex}
-                pathLengths={pathLengths}
-              />
-            )
-          })}
-        </AnimatePresence>
+              return (
+                <Packet
+                  key={`${item.id}-${item.stage}`}
+                  item={item}
+                  queueIndex={queueIndex}
+                  pathLengths={pathLengths}
+                />
+              )
+            })}
+          </AnimatePresence>
 
           {/* --- NODES --- */}
         <MachineNode
@@ -206,10 +201,9 @@ export default function DefineDispatchVisual() {
           isActive={isInferenceProcessing}
           activeWorkers={inferenceActiveDisplay}
           maxWorkers={INFERENCE_WORKERS}
-            isStressed={isStressed}
-            variant="singleton"
-            queueLen={inferenceQueueLen}
-          />
+          variant="singleton"
+          queueLen={inferenceQueueLen}
+        />
 
           {/* --- INPUT --- */}
           <g
@@ -451,7 +445,6 @@ function MachineNode({
   radius,
   label,
   isActive,
-  isStressed: _isStressed,
   variant,
   activeWorkers = 0,
   maxWorkers = activeWorkers,
@@ -464,7 +457,6 @@ function MachineNode({
   radius: number
   label: string
   isActive: boolean
-  isStressed?: boolean
   variant?: 'pool' | 'singleton'
   activeWorkers?: number
   maxWorkers?: number
@@ -491,7 +483,7 @@ function MachineNode({
 
   return (
     <g transform={`translate(${x}, ${y})`}>
-      {/* Node body + label + optional activity pulse */}
+      {/* Node body + label + activity bars */}
       <motion.rect
         x={-width / 2}
         y={-height / 2}
