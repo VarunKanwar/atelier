@@ -42,6 +42,7 @@ export const usePipelineSimulation = () => {
   const [items, setItems] = useState<PipelineItem[]>([])
   const [inputCount, setInputCount] = useState(INITIAL_ITEMS)
   const [completedCount, setCompletedCount] = useState(0)
+  const [cycle, setCycle] = useState(0)
 
   const lastEntryTime = useRef(0)
   const nextId = useRef(0)
@@ -193,20 +194,23 @@ export const usePipelineSimulation = () => {
 
   // Auto-loop once all items have drained.
   useEffect(() => {
-    if (inputCount === 0 && items.length === 0) {
-      const timer = setTimeout(() => {
-        // Reset simulation state for the next loop.
-        setInputCount(INITIAL_ITEMS)
-        setCompletedCount(0)
-        nextId.current = 0
-      }, 1500)
-      return () => clearTimeout(timer)
-    }
+     if (inputCount === 0 && items.length === 0) {
+        const timer = setTimeout(() => {
+           // Reset simulation state for the next loop.
+           setInputCount(INITIAL_ITEMS)
+           setCompletedCount(0)
+           nextId.current = 0
+           lastEntryTime.current = 0
+           setCycle(current => current + 1)
+        }, 100) 
+        return () => clearTimeout(timer)
+     }
   }, [inputCount, items.length])
 
   return {
     items,
     inputCount,
     completedCount: Math.floor(completedCount),
+    cycle,
   }
 }
