@@ -29,38 +29,41 @@ const PIPE_INTRO_STROKE = '#cbd5e1'
 const PIPE_COLOR_DARK = '#CBD5E1'
 const PACKET_THICKNESS = 2
 const PACKET_GLOW_THICKNESS = 2
-const PACKET_SEGMENT = 12
+const PACKET_LENGTH_PX = 20
 const WORKER_STEP_MS = 220
+const CURVE_BEND = 80
 
 const NODES = {
-  start: { x: 50, y: 150 },
-  preprocess: { x: 130, y: 150 },
-  split: { x: 190, y: 150 },
-  thumbCenter: { x: 300, y: 70 },
-  inferCenter: { x: 300, y: 230 },
-  join: { x: 380, y: 150 },
-  end: { x: 440, y: 150 },
+  start: { x: 45, y: 150, width: 80, height: 80, radius: 10 },
+  preprocess: { x: 160, y: 150, width: 48, height: 32, radius: 6 },
+  thumbCenter: { x: 300, y: 70, width: 48, height: 32, radius: 6 },
+  inferCenter: { x: 300, y: 230, width: 48, height: 32, radius: 6 },
+  end: { x: 440, y: 150, width: 80, height: 80, radius: 10 },
 }
+
+const edgeX = (node: { x: number; width: number }, side: 'left' | 'right') =>
+  node.x + (side === 'left' ? -node.width / 2 : node.width / 2)
 
 // Motion paths used by packets as they move through the pipeline.
 const PATHS = {
   // Entry: Start -> Preprocess
-  intro: `M ${NODES.start.x} ${NODES.start.y} L ${NODES.preprocess.x} ${NODES.preprocess.y}`,
+  intro: `M ${edgeX(NODES.start, 'right')} ${NODES.start.y} L ${edgeX(NODES.preprocess, 'left')} ${NODES.preprocess.y}`,
 
   // Branch A: Preprocess -> Split -> Thumbnails
-  thumb: `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.thumbCenter.x - 60} ${NODES.thumbCenter.y}, ${NODES.thumbCenter.x} ${NODES.thumbCenter.y}`,
+  thumb: `M ${edgeX(NODES.preprocess, 'right')} ${NODES.preprocess.y} C ${edgeX(NODES.preprocess, 'right') + CURVE_BEND} ${NODES.preprocess.y}, ${edgeX(NODES.thumbCenter, 'left') - CURVE_BEND} ${NODES.thumbCenter.y}, ${edgeX(NODES.thumbCenter, 'left')} ${NODES.thumbCenter.y}`,
 
   // Branch B: Preprocess -> Split -> Inference
-  infer: `M ${NODES.preprocess.x} ${NODES.preprocess.y} L ${NODES.split.x} ${NODES.split.y} C ${NODES.split.x + 40} ${NODES.split.y}, ${NODES.inferCenter.x - 60} ${NODES.inferCenter.y}, ${NODES.inferCenter.x} ${NODES.inferCenter.y}`,
+  infer: `M ${edgeX(NODES.preprocess, 'right')} ${NODES.preprocess.y} C ${edgeX(NODES.preprocess, 'right') + CURVE_BEND} ${NODES.preprocess.y}, ${edgeX(NODES.inferCenter, 'left') - CURVE_BEND} ${NODES.inferCenter.y}, ${edgeX(NODES.inferCenter, 'left')} ${NODES.inferCenter.y}`,
 
   // Merge: branch output -> Join -> End
-  thumbExit: `M ${NODES.thumbCenter.x} ${NODES.thumbCenter.y} C ${NODES.thumbCenter.x + 60} ${NODES.thumbCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+  thumbExit: `M ${edgeX(NODES.thumbCenter, 'right')} ${NODES.thumbCenter.y} C ${edgeX(NODES.thumbCenter, 'right') + CURVE_BEND} ${NODES.thumbCenter.y}, ${edgeX(NODES.end, 'left') - CURVE_BEND} ${NODES.end.y}, ${edgeX(NODES.end, 'left')} ${NODES.end.y}`,
 
-  inferExit: `M ${NODES.inferCenter.x} ${NODES.inferCenter.y} C ${NODES.inferCenter.x + 60} ${NODES.inferCenter.y}, ${NODES.join.x - 40} ${NODES.join.y}, ${NODES.join.x} ${NODES.join.y} L ${NODES.end.x} ${NODES.end.y}`,
+  inferExit: `M ${edgeX(NODES.inferCenter, 'right')} ${NODES.inferCenter.y} C ${edgeX(NODES.inferCenter, 'right') + CURVE_BEND} ${NODES.inferCenter.y}, ${edgeX(NODES.end, 'left') - CURVE_BEND} ${NODES.end.y}, ${edgeX(NODES.end, 'left')} ${NODES.end.y}`,
 }
 
 export default function DefineDispatchVisual() {
   const { items, inputCount, completedCount, cycle } = usePipelineSimulation()
+  const pathLengths = usePathLengths(PATHS)
 
   // Pre-calculate queues
   const preprocessQueue = items
@@ -158,70 +161,110 @@ export default function DefineDispatchVisual() {
                 queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
               }
 
-              return <Packet key={`${item.id}-${item.stage}`} item={item} queueIndex={queueIndex} />
-            })}
-          </AnimatePresence>
+            return (
+              <Packet
+                key={`${item.id}-${item.stage}`}
+                item={item}
+                queueIndex={queueIndex}
+                pathLengths={pathLengths}
+              />
+            )
+          })}
+        </AnimatePresence>
 
           {/* --- NODES --- */}
-          <MachineNode
-            x={NODES.preprocess.x}
-            y={NODES.preprocess.y}
-            label="Preprocess"
-            isActive={preprocessActiveDisplay > 0}
-            activeWorkers={preprocessActiveDisplay}
-            maxWorkers={PREPROCESS_WORKERS}
-          />
-          <MachineNode
-            x={NODES.thumbCenter.x}
-            y={NODES.thumbCenter.y}
-            label="Thumbnails"
-            isActive={thumbActiveDisplay > 0}
-            activeWorkers={thumbActiveDisplay}
-            maxWorkers={THUMB_WORKERS}
-            variant="pool"
-          />
-          <MachineNode
-            x={NODES.inferCenter.x}
-            y={NODES.inferCenter.y}
-            label="Inference"
-            isActive={isInferenceProcessing}
-            activeWorkers={inferenceActiveDisplay}
-            maxWorkers={INFERENCE_WORKERS}
+        <MachineNode
+          x={NODES.preprocess.x}
+          y={NODES.preprocess.y}
+          width={NODES.preprocess.width}
+          height={NODES.preprocess.height}
+          radius={NODES.preprocess.radius}
+          label="Preprocess"
+          isActive={preprocessActiveDisplay > 0}
+          activeWorkers={preprocessActiveDisplay}
+          maxWorkers={PREPROCESS_WORKERS}
+        />
+        <MachineNode
+          x={NODES.thumbCenter.x}
+          y={NODES.thumbCenter.y}
+          width={NODES.thumbCenter.width}
+          height={NODES.thumbCenter.height}
+          radius={NODES.thumbCenter.radius}
+          label="Thumbnails"
+          isActive={thumbActiveDisplay > 0}
+          activeWorkers={thumbActiveDisplay}
+          maxWorkers={THUMB_WORKERS}
+          variant="pool"
+        />
+        <MachineNode
+          x={NODES.inferCenter.x}
+          y={NODES.inferCenter.y}
+          width={NODES.inferCenter.width}
+          height={NODES.inferCenter.height}
+          radius={NODES.inferCenter.radius}
+          label="Inference"
+          isActive={isInferenceProcessing}
+          activeWorkers={inferenceActiveDisplay}
+          maxWorkers={INFERENCE_WORKERS}
             isStressed={isStressed}
             variant="singleton"
             queueLen={inferenceQueueLen}
           />
 
           {/* --- INPUT --- */}
-          <g transform={`translate(${NODES.start.x}, ${NODES.start.y})`}>
-            <text fontSize="10" fill="#64748b" x="0" y="-25" textAnchor="middle">
+          <g
+            transform={`translate(${NODES.start.x - NODES.start.width / 2}, ${NODES.start.y - NODES.start.height / 2})`}
+          >
+            <text
+              fontSize="10"
+              fill="#64748b"
+              x={NODES.start.width / 2}
+              y="-8"
+              textAnchor="middle"
+            >
               Album
             </text>
-            {Array.from({ length: Math.min(inputCount, 6) }).map((_, i) => (
-              <motion.rect
-                key={i}
-                x={-i * 0.5}
-                y={-i * 2}
-                width={20}
-                height={20}
-                rx={2}
-                fill="#fff"
-                stroke="#94a3b8"
-                strokeWidth={1}
-                initial={false}
-                animate={{ x: -i * 0.5, y: -i * 2, opacity: 1 }}
-                exit={{ opacity: 0, x: 20 }}
-              />
-            ))}
+            <rect
+              width={NODES.start.width}
+              height={NODES.start.height}
+              rx={NODES.start.radius}
+              fill="#fff"
+              stroke={PIPE_COLOR_DARK}
+            />
+            <TextOverlay
+              x={NODES.start.width / 2}
+              y={NODES.start.height / 2 + 4}
+              text={String(inputCount)}
+              color="#333"
+            />
           </g>
 
           {/* --- OUTPUT --- */}
-          <g transform={`translate(${NODES.end.x + 10}, ${NODES.end.y - 12})`}>
-            <text fontSize="9" fill="gray" x="0" y="-8">
+          <g
+            transform={`translate(${NODES.end.x - NODES.end.width / 2}, ${NODES.end.y - NODES.end.height / 2})`}
+          >
+            <text
+              fontSize="9"
+              fill="gray"
+              x={NODES.end.width / 2}
+              y="-8"
+              textAnchor="middle"
+            >
               Gallery
             </text>
-            <rect width={24} height={24} rx="4" fill="none" stroke={PIPE_COLOR_DARK} />
-            <TextOverlay x={12} y={15} text={String(completedCount)} color="#333" />
+            <rect
+              width={NODES.end.width}
+              height={NODES.end.height}
+              rx={NODES.end.radius}
+              fill="#fff"
+              stroke={PIPE_COLOR_DARK}
+            />
+            <TextOverlay
+              x={NODES.end.width / 2}
+              y={NODES.end.height / 2 + 4}
+              text={String(completedCount)}
+              color="#333"
+            />
           </g>
         </g>
       </svg>
@@ -250,11 +293,37 @@ const getCenteredSlots = (count: number, max: number) => {
   return Array.from({ length: clamped }, (_, index) => start + index)
 }
 
-function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }) {
+const usePathLengths = (paths: Record<string, string>) => {
+  const [lengths, setLengths] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    const next: Record<string, number> = {}
+    for (const [key, d] of Object.entries(paths)) {
+      pathEl.setAttribute('d', d)
+      next[key] = pathEl.getTotalLength()
+    }
+    setLengths(next)
+  }, [paths])
+
+  return lengths
+}
+
+function Packet({
+  item,
+  queueIndex,
+  pathLengths,
+}: {
+  item: PipelineItem
+  queueIndex: number
+  pathLengths: Record<string, number>
+}) {
   // Used to select the correct exit path once the item completes.
   const isThumb = item.type === 'thumb'
 
   // Stage → motion recipe (path, offsets, duration, accent).
+  let pathKey: keyof typeof PATHS = 'intro'
   let path = ''
   let finalOffset = '100%'
   let startOffset = '0%'
@@ -262,6 +331,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   let accent = '#94a3b8'
 
   if (item.stage === 'preprocess-queue') {
+    pathKey = 'intro'
     path = PATHS.intro
     duration = TRAVEL_DURATION / 1000
     accent = '#38bdf8'
@@ -269,6 +339,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     // Stack queue items by backing up along the path.
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
   } else if (item.stage === 'preprocess') {
+    pathKey = 'intro'
     path = PATHS.intro
     duration = PREPROCESS_DURATION / 1000
     accent = '#38bdf8'
@@ -276,6 +347,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     startOffset = '95%'
     finalOffset = '95%'
   } else if (item.stage === 'thumb-queue') {
+    pathKey = 'thumb'
     path = PATHS.thumb
     accent = '#a78bfa'
     startOffset = '0%'
@@ -283,6 +355,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
     duration = TRAVEL_DURATION / 1000
   } else if (item.stage === 'thumb-process') {
+    pathKey = 'thumb'
     path = PATHS.thumb
     accent = '#60a5fa'
     // Hold at the worker node while processing.
@@ -290,6 +363,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     finalOffset = '95%'
     duration = THUMB_DURATION / 1000
   } else if (item.stage === 'inference-queue') {
+    pathKey = 'infer'
     path = PATHS.infer
     accent = '#fbbf24'
     startOffset = '0%'
@@ -297,6 +371,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     finalOffset = `${Math.max(0, 95 - queueIndex * 3)}%`
     duration = TRAVEL_DURATION / 1000
   } else if (item.stage === 'inference-process') {
+    pathKey = 'infer'
     path = PATHS.infer
     accent = '#f43f5e'
     // Hold at the worker node while processing.
@@ -304,6 +379,7 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
     finalOffset = '95%'
     duration = INFERENCE_DURATION / 1000
   } else if (item.stage === 'done') {
+    pathKey = isThumb ? 'thumbExit' : 'inferExit'
     path = isThumb ? PATHS.thumbExit : PATHS.inferExit
     accent = isThumb ? '#60a5fa' : '#f43f5e'
     startOffset = '0%'
@@ -316,7 +392,9 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
   const endPercent = Number.parseFloat(finalOffset)
   const startDash = -startPercent
   const endDash = -endPercent
-  const dashArray = `${PACKET_SEGMENT} ${100 - PACKET_SEGMENT}`
+  const lengthPx = pathLengths[pathKey] ?? 100
+  const segmentPercent = Math.min(100, (PACKET_LENGTH_PX / Math.max(1, lengthPx)) * 100)
+  const dashArray = `${segmentPercent} ${100 - segmentPercent}`
 
   return (
     <g>
@@ -368,6 +446,9 @@ function Packet({ item, queueIndex }: { item: PipelineItem; queueIndex: number }
 function MachineNode({
   x,
   y,
+  width,
+  height,
+  radius,
   label,
   isActive,
   isStressed: _isStressed,
@@ -378,6 +459,9 @@ function MachineNode({
 }: {
   x: number
   y: number
+  width: number
+  height: number
+  radius: number
   label: string
   isActive: boolean
   isStressed?: boolean
@@ -409,11 +493,11 @@ function MachineNode({
     <g transform={`translate(${x}, ${y})`}>
       {/* Node body + label + optional activity pulse */}
       <motion.rect
-        x="-24"
-        y="-16"
-        width="48"
-        height="32"
-        rx="8"
+        x={-width / 2}
+        y={-height / 2}
+        width={width}
+        height={height}
+        rx={radius}
         fill={fillColor}
         stroke={strokeColor}
         strokeWidth={isActive || queueLen > 0 ? 2 : 1.5}
