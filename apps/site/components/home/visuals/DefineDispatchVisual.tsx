@@ -601,15 +601,10 @@ function MachineNode({
   let fillColor: string = COLORS.surface
   let strokeColor: string = COLORS.outline
 
-  if (variant === 'singleton') {
-    if (queueLen > 5) strokeColor = COLORS.dangerStroke
-    else if (queueLen > 3) strokeColor = COLORS.warnStroke
-    else if (isActive) strokeColor = COLORS.textMuted
-  } else if (variant === 'pool') {
-    if (isActive) strokeColor = COLORS.textMuted
-  } else {
-    if (isActive) strokeColor = COLORS.textMuted
-  }
+  const pressure = queueLen / Math.max(1, maxWorkers)
+  if (pressure > 1.5) strokeColor = COLORS.dangerStroke
+  else if (pressure > 0.75) strokeColor = COLORS.warnStroke
+  else if (isActive) strokeColor = COLORS.textMuted
 
   return (
     <g transform={`translate(${x}, ${y})`}>
