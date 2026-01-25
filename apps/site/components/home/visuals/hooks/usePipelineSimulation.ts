@@ -18,7 +18,7 @@ export type PipelineItem = {
   label: string
 }
 
-export const SPEED_SCALE = 1
+export const SPEED_SCALE = 1.5
 
 export const INITIAL_ITEMS = 10
 export const PREPROCESS_DURATION = 1000 * SPEED_SCALE
@@ -27,7 +27,7 @@ export const THUMB_DURATION = 1000 * SPEED_SCALE
 export const PREPROCESS_WORKERS = 4
 export const THUMB_WORKERS = 4
 export const INFERENCE_WORKERS = 1
-export const ENTRY_INTERVAL = 400 * SPEED_SCALE
+export const ENTRY_INTERVAL = 200 * SPEED_SCALE
 export const TRAVEL_DURATION = 500 * SPEED_SCALE // Minimum traversal time to keep motion legible.
 export const EXIT_DURATION = 800 * SPEED_SCALE
 
