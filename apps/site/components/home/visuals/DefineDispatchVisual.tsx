@@ -25,41 +25,20 @@ import {
  */
 
 const COLORS = {
-  pipe: {
-    intro: '#cbd5e1',
-    dark: '#CBD5E1',
-    gradientMid: '#9CA3AF',
-  },
-  packet: {
-    preprocess: '#111827',
-    thumbQueue: '#9CA3AF',
-    thumbProcess: '#0B0F14',
-    inferenceQueue: '#9CA3AF',
-    inferenceProcess: '#111827',
-    rainbowStops: ['#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#facc15'],
-  },
-  node: {
-    surface: '#fff',
-    label: '#64748b',
-    count: '#333',
-    idleStroke: '#CBD5E1',
-    active: '#111827',
-    poolActive: '#0B0F14',
-    warnFill: '#fff',
-    dangerFill: '#fff',
-    warnStroke: '#D6A896',
-    dangerStroke: '#C58B78',
-  },
-  photo: {
-    idle: '#cbd5e1',
-    done: '#9CA3AF',
-  },
+  surface: '#fff',
+  outline: '#CBD5E1',
+  muted: '#9CA3AF',
+  textMuted: '#64748b',
+  textStrong: '#333',
+  ink: '#111827',
+  inkDeep: '#0B0F14',
+  warnStroke: '#D6A896',
+  dangerStroke: '#C58B78',
+  rainbowStops: ['#22d3ee', '#08090a', '#8b5cf6', '#ec4899', '#f97316', '#facc15'],
 } as const
 
 // Layout anchors for the pipeline diagram in SVG coordinate space.
 const STROKE_WIDTH_BASE = 1.5
-const PIPE_STROKE = COLORS.pipe.intro
-const PIPE_COLOR_DARK = COLORS.pipe.dark
 const PACKET_THICKNESS = 0
 const PACKET_GLOW_THICKNESS = 1.5
 const PACKET_LENGTH_PX = 28
@@ -70,8 +49,6 @@ const PHOTO_STACK_OFFSET_X = 0
 const PHOTO_STACK_OFFSET_Y = -3.5
 const PHOTO_STACK_PADDING = 8
 const PHOTO_SKEW_DEG = 20 // Positive skew: edge/corner faces viewer
-const PHOTO_BORDER_IDLE = COLORS.photo.idle
-const PHOTO_BORDER_DONE = COLORS.photo.done
 
 const NODES = {
   start: { x: 45, y: 150, width: 80, height: 80, radius: 10 },
@@ -113,42 +90,42 @@ type StageVisualConfig = {
 const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
   'preprocess-queue': {
     pathKey: 'intro',
-    accent: COLORS.packet.preprocess,
+    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   preprocess: {
     pathKey: 'intro',
-    accent: COLORS.packet.preprocess,
+    accent: COLORS.muted,
     durationMs: PREPROCESS_DURATION,
     startOffset: '95%',
     endOffset: '95%',
   },
   'thumb-queue': {
     pathKey: 'thumb',
-    accent: COLORS.packet.thumbQueue,
+    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   'thumb-process': {
     pathKey: 'thumb',
-    accent: COLORS.packet.thumbProcess,
+    accent: COLORS.inkDeep,
     durationMs: THUMB_DURATION,
     startOffset: '95%',
     endOffset: '95%',
   },
   'inference-queue': {
     pathKey: 'infer',
-    accent: COLORS.packet.inferenceQueue,
+    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   'inference-process': {
     pathKey: 'infer',
-    accent: COLORS.packet.inferenceProcess,
+    accent: COLORS.ink,
     durationMs: INFERENCE_DURATION,
     startOffset: '95%',
     endOffset: '95%',
@@ -156,7 +133,7 @@ const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
   done: {
     pathKey: item => (item.type === 'thumb' ? 'thumbExit' : 'inferExit'),
     accent: item =>
-      item.type === 'thumb' ? COLORS.packet.thumbProcess : COLORS.packet.inferenceProcess,
+      item.type === 'thumb' ? COLORS.inkDeep : COLORS.ink,
     durationMs: EXIT_DURATION,
     startOffset: '0%',
     endOffset: '100%',
@@ -164,8 +141,10 @@ const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
 }
 
 export default function DefineDispatchVisual() {
-  const { items, completedCount, cycle } = usePipelineSimulation()
+  const { items, completedCount, cycle, uploadState, uploadCueActive } = usePipelineSimulation()
   const pathLengths = usePathLengths(PATHS)
+  const isUploading = uploadState.phase === 'upload'
+  const uploadIconColor = uploadCueActive ? COLORS.muted : COLORS.outline
 
   // Pre-calculate queues
   const preprocessQueue = items
@@ -216,11 +195,11 @@ export default function DefineDispatchVisual() {
             x2="500"
             y2="0"
           >
-            {COLORS.packet.rainbowStops.map((color, index) => (
+            {COLORS.rainbowStops.map((color, index) => (
               <stop
                 // biome-ignore lint/suspicious/noArrayIndexKey: stable array for static gradient.
                 key={index}
-                offset={`${(index / (COLORS.packet.rainbowStops.length - 1)) * 100}%`}
+                offset={`${(index / (COLORS.rainbowStops.length - 1)) * 100}%`}
                 stopColor={color}
               />
             ))}
@@ -242,7 +221,12 @@ export default function DefineDispatchVisual() {
         </defs>
 
         {/* --- DAG EDGES (Static Pipes) --- */}
-        <g stroke={PIPE_STROKE} fill="none" strokeWidth={STROKE_WIDTH_BASE} strokeLinecap="round">
+        <g
+          stroke={COLORS.outline}
+          fill="none"
+          strokeWidth={STROKE_WIDTH_BASE}
+          strokeLinecap="round"
+        >
           <path d={PATHS.intro} />
           <path d={PATHS.thumb} />
           <path d={PATHS.infer} />
@@ -317,29 +301,34 @@ export default function DefineDispatchVisual() {
           <g
             transform={`translate(${NODES.start.x - NODES.start.width / 2}, ${NODES.start.y - NODES.start.height / 2})`}
           >
-            <text
-              fontSize="10"
-              fill={COLORS.node.label}
-              x={NODES.start.width / 2}
-              y="-8"
-              textAnchor="middle"
-            >
-              Album
-            </text>
             <rect
               width={NODES.start.width}
               height={NODES.start.height}
               rx={NODES.start.radius}
-              fill={COLORS.node.surface}
-              stroke={PIPE_COLOR_DARK}
+              fill={COLORS.surface}
+              stroke={COLORS.outline}
             />
-            <PhotoStack
-              containerWidth={NODES.start.width}
-              containerHeight={NODES.start.height}
-              count={INITIAL_ITEMS}
-              completedCount={completedCount}
-              radius={NODES.start.radius}
-            />
+            {isUploading ? (
+              <UploadCue
+                width={NODES.start.width}
+                height={NODES.start.height}
+                labelColor={uploadIconColor}
+                isAnimating={!uploadCueActive}
+              />
+            ) : null}
+            <motion.g
+              initial={false}
+              animate={{ opacity: isUploading ? 0 : 1, y: isUploading ? 4 : 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            >
+              <PhotoStack
+                containerWidth={NODES.start.width}
+                containerHeight={NODES.start.height}
+                count={INITIAL_ITEMS}
+                completedCount={completedCount}
+                radius={NODES.start.radius}
+              />
+            </motion.g>
           </g>
 
           {/* --- OUTPUT --- */}
@@ -353,19 +342,119 @@ export default function DefineDispatchVisual() {
               width={NODES.end.width}
               height={NODES.end.height}
               rx={NODES.end.radius}
-              fill={COLORS.node.surface}
-              stroke={PIPE_COLOR_DARK}
+              fill={COLORS.surface}
+              stroke={COLORS.outline}
             />
             <TextOverlay
               x={NODES.end.width / 2}
               y={NODES.end.height / 2 + 4}
               text={String(completedCount)}
-              color={COLORS.node.count}
+              color={COLORS.textStrong}
             />
           </g>
         </g>
       </svg>
     </Box>
+  )
+}
+
+const UploadCue = ({
+  width,
+  height,
+  labelColor,
+  isAnimating,
+}: {
+  width: number
+  height: number
+  labelColor: string
+  isAnimating: boolean
+}) => {
+  const centerX = width / 2
+  const trayWidth = width * 0.42
+  const trayHeight = height * 0.12
+  const trayY = height * 0.58
+  const innerArrowTop = height * 0.28
+  const innerArrowHead = 6
+  const iconOffsetY = height / 2 - (innerArrowTop + trayY) / 2
+
+  return (
+    <g transform={`translate(0, ${iconOffsetY})`}>
+      <line
+        x1={centerX - trayWidth / 2}
+        y1={trayY}
+        x2={centerX + trayWidth / 2}
+        y2={trayY}
+        stroke={labelColor}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1={centerX - trayWidth / 2}
+        y1={trayY}
+        x2={centerX - trayWidth / 2}
+        y2={trayY - trayHeight}
+        stroke={labelColor}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1={centerX + trayWidth / 2}
+        y1={trayY}
+        x2={centerX + trayWidth / 2}
+        y2={trayY - trayHeight}
+        stroke={labelColor}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      {isAnimating ? (
+        <motion.g
+          animate={{ y: [0, -4, 0], opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <line
+            x1={centerX}
+            y1={trayY - trayHeight - 4}
+            x2={centerX}
+            y2={innerArrowTop}
+            stroke={labelColor}
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <polyline
+            points={`${centerX - innerArrowHead},${innerArrowTop + innerArrowHead} ${centerX},${
+              innerArrowTop
+            } ${centerX + innerArrowHead},${innerArrowTop + innerArrowHead}`}
+            fill="none"
+            stroke={labelColor}
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </motion.g>
+      ) : (
+        <g>
+          <line
+            x1={centerX}
+            y1={trayY - trayHeight - 4}
+            x2={centerX}
+            y2={innerArrowTop}
+            stroke={labelColor}
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <polyline
+            points={`${centerX - innerArrowHead},${innerArrowTop + innerArrowHead} ${centerX},${
+              innerArrowTop
+            } ${centerX + innerArrowHead},${innerArrowTop + innerArrowHead}`}
+            fill="none"
+            stroke={labelColor}
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+      )}
+    </g>
   )
 }
 
@@ -508,23 +597,18 @@ function MachineNode({
   maxWorkers?: number
   queueLen?: number
 }) {
-  // Node appearance encodes load and activity; the singleton warns on queue growth.
-  let fillColor: string = COLORS.node.surface
-  let strokeColor: string = COLORS.node.idleStroke
+  // Node appearance encodes load and activity
+  let fillColor: string = COLORS.surface
+  let strokeColor: string = COLORS.outline
 
   if (variant === 'singleton') {
-    if (queueLen > 4)
-      fillColor = COLORS.node.dangerFill // Light Red
-    else if (queueLen > 2) fillColor = COLORS.node.warnFill // Light Yellow
-
-    if (queueLen > 4) strokeColor = COLORS.node.dangerStroke
-    else if (queueLen > 2) strokeColor = COLORS.node.warnStroke
-    else if (isActive) strokeColor = COLORS.node.active
+    if (queueLen > 5) strokeColor = COLORS.dangerStroke
+    else if (queueLen > 3) strokeColor = COLORS.warnStroke
+    else if (isActive) strokeColor = COLORS.textMuted
   } else if (variant === 'pool') {
-    if (isActive) strokeColor = COLORS.node.poolActive
+    if (isActive) strokeColor = COLORS.textMuted
   } else {
-    // Preprocess
-    if (isActive) strokeColor = COLORS.node.active
+    if (isActive) strokeColor = COLORS.textMuted
   }
 
   return (
@@ -543,7 +627,7 @@ function MachineNode({
         transition={{ duration: 0.3 }}
       />
 
-      <text y="40" fontSize="10" textAnchor="middle" fill={COLORS.node.label} fontWeight="medium">
+      <text y="40" fontSize="10" textAnchor="middle" fill={COLORS.textMuted} fontWeight="medium">
         {label}
       </text>
 
@@ -633,7 +717,7 @@ function PhotoStack({
         // Each paper shifts up and left as we go up the stack
         const x = baseX + i * PHOTO_STACK_OFFSET_X
         const y = baseY + i * PHOTO_STACK_OFFSET_Y
-        const stroke = completedCount > stackCount - 1 - i ? PHOTO_BORDER_DONE : PHOTO_BORDER_IDLE
+        const stroke = completedCount > stackCount - 1 - i ? COLORS.muted : COLORS.outline
 
         return (
           <g
@@ -647,7 +731,7 @@ function PhotoStack({
               width={paperWidth}
               height={paperHeight}
               rx={Math.max(2, radius - 4)}
-              fill={COLORS.node.surface}
+              fill={COLORS.surface}
               stroke={stroke}
             />
           </g>

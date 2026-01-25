@@ -18,9 +18,15 @@ export type PipelineItem = {
   label: string
 }
 
+export type UploadPhase = 'upload' | 'running'
+
+export type UploadState = {
+  phase: UploadPhase
+}
+
 export const SPEED_SCALE = 1.5
 
-export const INITIAL_ITEMS = 10
+export const INITIAL_ITEMS = 8
 export const PREPROCESS_DURATION = 1000 * SPEED_SCALE
 export const INFERENCE_DURATION = 1400 * SPEED_SCALE
 export const THUMB_DURATION = 1000 * SPEED_SCALE
@@ -30,6 +36,8 @@ export const INFERENCE_WORKERS = 1
 export const ENTRY_INTERVAL = 200 * SPEED_SCALE
 export const TRAVEL_DURATION = 500 * SPEED_SCALE // Minimum traversal time to keep motion legible.
 export const EXIT_DURATION = 800 * SPEED_SCALE
+export const UPLOAD_DURATION = 2000
+export const UPLOAD_CLICK_CUE_DURATION = 1000
 
 /*
  * Intent: feed the hero animation with a simple, deterministic workflow model.
@@ -42,6 +50,8 @@ export const usePipelineSimulation = () => {
   const [inputCount, setInputCount] = useState(INITIAL_ITEMS)
   const [completedCount, setCompletedCount] = useState(0)
   const [cycle, setCycle] = useState(0)
+  const [uploadState, setUploadState] = useState<UploadState>({ phase: 'upload' })
+  const [uploadCueActive, setUploadCueActive] = useState(true)
   const isVisibleRef = useRef(true)
 
   const lastEntryTime = useRef(0)
@@ -60,6 +70,23 @@ export const usePipelineSimulation = () => {
   }, [])
 
   useEffect(() => {
+    setUploadState({ phase: 'upload' })
+    setUploadCueActive(false)
+    const cueStartDelay = Math.max(0, UPLOAD_DURATION - UPLOAD_CLICK_CUE_DURATION)
+    const cueTimer = globalThis.setTimeout(() => {
+      setUploadCueActive(true)
+    }, cueStartDelay)
+    const uploadTimer = globalThis.setTimeout(() => {
+      setUploadState({ phase: 'running' })
+      setUploadCueActive(false)
+    }, UPLOAD_DURATION)
+    return () => {
+      clearTimeout(cueTimer)
+      clearTimeout(uploadTimer)
+    }
+  }, [cycle])
+
+  useEffect(() => {
     const tickRate = 50
     const interval = setInterval(() => {
       if (!isVisibleRef.current) return
@@ -71,7 +98,11 @@ export const usePipelineSimulation = () => {
 
         // --- 1. NEW ITEM ENTRY ---
         // Spawn items into the preprocess queue at a steady cadence.
-        if (inputCount > 0 && now - lastEntryTime.current > ENTRY_INTERVAL) {
+        if (
+          uploadState.phase === 'running' &&
+          inputCount > 0 &&
+          now - lastEntryTime.current > ENTRY_INTERVAL
+        ) {
           if (nextId.current < INITIAL_ITEMS) {
             const id = nextId.current++
             newItems.push({
@@ -203,7 +234,7 @@ export const usePipelineSimulation = () => {
     }, tickRate)
 
     return () => clearInterval(interval)
-  }, [inputCount])
+  }, [inputCount, uploadState.phase])
 
   // Auto-loop once all items have drained.
   useEffect(() => {
@@ -222,8 +253,9 @@ export const usePipelineSimulation = () => {
 
   return {
     items,
-    inputCount,
     completedCount: Math.floor(completedCount),
     cycle,
+    uploadState,
+    uploadCueActive,
   }
 }
