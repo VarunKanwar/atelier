@@ -24,9 +24,6 @@ import {
  * bottlenecks and backpressure under load.
  */
 
-// Layout anchors for the pipeline diagram in SVG coordinate space.
-const STROKE_WIDTH_BASE = 1.25
-const PIPE_STROKE = 'url(#pipe-gradient)'
 const COLORS = {
   pipe: {
     intro: '#cbd5e1',
@@ -59,9 +56,11 @@ const COLORS = {
   },
 } as const
 
-const PIPE_INTRO_STROKE = COLORS.pipe.intro
+// Layout anchors for the pipeline diagram in SVG coordinate space.
+const STROKE_WIDTH_BASE = 1.5
+const PIPE_STROKE = COLORS.pipe.intro
 const PIPE_COLOR_DARK = COLORS.pipe.dark
-const PACKET_THICKNESS = 1
+const PACKET_THICKNESS = 0
 const PACKET_GLOW_THICKNESS = 1.5
 const PACKET_LENGTH_PX = 28
 const WORKER_STEP_MS = 220
@@ -205,14 +204,18 @@ export default function DefineDispatchVisual() {
         viewBox="0 0 500 300"
         style={{ width: '100%', height: '100%', maxWidth: '600px' }}
         preserveAspectRatio="xMidYMid meet"
+        aria-label="Pipeline visualization showing task dispatching flow"
+        role="img"
       >
         <defs>
-          <linearGradient id="pipe-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={COLORS.pipe.intro} />
-            <stop offset="50%" stopColor={COLORS.pipe.gradientMid} />
-            <stop offset="100%" stopColor={COLORS.pipe.intro} />
-          </linearGradient>
-          <linearGradient id="packet-rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient
+            id="packet-rainbow"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="500"
+            y2="0"
+          >
             {COLORS.packet.rainbowStops.map((color, index) => (
               <stop
                 // biome-ignore lint/suspicious/noArrayIndexKey: stable array for static gradient.
@@ -222,7 +225,14 @@ export default function DefineDispatchVisual() {
               />
             ))}
           </linearGradient>
-          <filter id="packet-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <filter
+            id="packet-glow"
+            filterUnits="userSpaceOnUse"
+            x="-20"
+            y="-20"
+            width="540"
+            height="340"
+          >
             <feGaussianBlur stdDeviation="2" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
@@ -233,7 +243,7 @@ export default function DefineDispatchVisual() {
 
         {/* --- DAG EDGES (Static Pipes) --- */}
         <g stroke={PIPE_STROKE} fill="none" strokeWidth={STROKE_WIDTH_BASE} strokeLinecap="round">
-          <path d={PATHS.intro} stroke={PIPE_INTRO_STROKE} />
+          <path d={PATHS.intro} />
           <path d={PATHS.thumb} />
           <path d={PATHS.infer} />
           <path d={PATHS.thumbExit} />
@@ -499,8 +509,8 @@ function MachineNode({
   queueLen?: number
 }) {
   // Node appearance encodes load and activity; the singleton warns on queue growth.
-  let fillColor = COLORS.node.surface
-  let strokeColor = COLORS.node.idleStroke
+  let fillColor: string = COLORS.node.surface
+  let strokeColor: string = COLORS.node.idleStroke
 
   if (variant === 'singleton') {
     if (queueLen > 4)
