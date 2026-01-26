@@ -44,6 +44,10 @@ const PACKET_GLOW_THICKNESS = 1.5
 const PACKET_LENGTH_PX = 28
 const WORKER_STEP_MS = 220
 const CURVE_BEND = 30
+// Label layout in SVG user units: box height and gap from the node edge.
+const LABEL_FONT_SIZE = 12
+const LABEL_HEIGHT = 12
+const LABEL_OFFSET = 6
 // Isometric stack: each paper shifts diagonally as it stacks
 const PHOTO_STACK_OFFSET_X = 0
 const PHOTO_STACK_OFFSET_Y = -3.5
@@ -275,33 +279,50 @@ export default function DefineDispatchVisual() {
             width={NODES.preprocess.width}
             height={NODES.preprocess.height}
             radius={NODES.preprocess.radius}
-            label="Preprocess"
             isActive={preprocessActiveDisplay > 0}
             activeWorkers={preprocessActiveDisplay}
             maxWorkers={PREPROCESS_WORKERS}
           />
+          <SvgLabel
+            x={NODES.preprocess.x - NODES.preprocess.width / 2}
+            y={NODES.preprocess.y + NODES.preprocess.height / 2 + LABEL_HEIGHT - LABEL_OFFSET}
+            width={NODES.preprocess.width}
+            text="decode"
+          />
+
           <MachineNode
             x={NODES.thumbCenter.x}
             y={NODES.thumbCenter.y}
             width={NODES.thumbCenter.width}
             height={NODES.thumbCenter.height}
             radius={NODES.thumbCenter.radius}
-            label="Thumbnails"
             isActive={thumbActiveDisplay > 0}
             activeWorkers={thumbActiveDisplay}
             maxWorkers={THUMB_WORKERS}
           />
+          <SvgLabel
+            x={NODES.thumbCenter.x - NODES.thumbCenter.width / 2}
+            y={NODES.thumbCenter.y + NODES.thumbCenter.height / 2 + LABEL_HEIGHT - LABEL_OFFSET}
+            width={NODES.thumbCenter.width}
+            text="preview"
+          />
+
           <MachineNode
             x={NODES.inferCenter.x}
             y={NODES.inferCenter.y}
             width={NODES.inferCenter.width}
             height={NODES.inferCenter.height}
             radius={NODES.inferCenter.radius}
-            label="Inference"
             isActive={isInferenceProcessing}
             activeWorkers={inferenceActiveDisplay}
             maxWorkers={INFERENCE_WORKERS}
             queueLen={inferenceQueueLen}
+          />
+          <SvgLabel
+            x={NODES.inferCenter.x - NODES.inferCenter.width / 2}
+            y={NODES.inferCenter.y + NODES.inferCenter.height / 2 + LABEL_HEIGHT - LABEL_OFFSET}
+            width={NODES.inferCenter.width}
+            text="classify"
           />
 
           {/* --- INPUT --- */}
@@ -342,9 +363,7 @@ export default function DefineDispatchVisual() {
           <g
             transform={`translate(${NODES.end.x - NODES.end.width / 2}, ${NODES.end.y - NODES.end.height / 2})`}
           >
-            <text fontSize="9" fill="gray" x={NODES.end.width / 2} y="-8" textAnchor="middle">
-              Gallery
-            </text>
+            {/* <SvgLabel x={0} y={- LABEL_HEIGHT - LABEL_OFFSET} width={NODES.end.width} text="Gallery" /> */}
             <rect
               width={NODES.end.width}
               height={NODES.end.height}
@@ -360,12 +379,38 @@ export default function DefineDispatchVisual() {
               labelsFilled={galleryLabelCount}
               color={COLORS.muted}
             />
+            <SvgLabel
+              x={0}
+              y={NODES.end.height + LABEL_HEIGHT - LABEL_OFFSET}
+              width={NODES.end.width}
+              text="Gallery"
+            />
           </g>
         </g>
       </svg>
     </Box>
   )
 }
+
+const SvgLabel = ({ x, y, width, text }: { x: number; y: number; width: number; text: string }) => (
+  <foreignObject x={x} y={y} width={width} height={LABEL_HEIGHT} pointerEvents="none">
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: `${LABEL_FONT_SIZE}px`,
+        lineHeight: '1',
+        color: COLORS.textMuted,
+        fontWeight: 500,
+      }}
+    >
+      {text}
+    </div>
+  </foreignObject>
+)
 
 const UploadCue = ({
   width,
@@ -587,7 +632,6 @@ function MachineNode({
   width,
   height,
   radius,
-  label,
   isActive,
   activeWorkers = 0,
   maxWorkers = activeWorkers,
@@ -598,7 +642,6 @@ function MachineNode({
   width: number
   height: number
   radius: number
-  label: string
   isActive: boolean
   activeWorkers?: number
   maxWorkers?: number
@@ -615,7 +658,7 @@ function MachineNode({
 
   return (
     <g transform={`translate(${x}, ${y})`}>
-      {/* Node body + label + activity bars */}
+      {/* Node body + activity bars */}
       <motion.rect
         x={-width / 2}
         y={-height / 2}
@@ -628,10 +671,6 @@ function MachineNode({
         animate={{ fill: fillColor, stroke: strokeColor }}
         transition={{ duration: 0.3 }}
       />
-
-      <text y="40" fontSize="10" textAnchor="middle" fill={COLORS.textMuted} fontWeight="medium">
-        {label}
-      </text>
 
       {activeWorkers > 0 && (
         <g transform="translate(0, 6)">
