@@ -132,8 +132,7 @@ const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
   },
   done: {
     pathKey: item => (item.type === 'thumb' ? 'thumbExit' : 'inferExit'),
-    accent: item =>
-      item.type === 'thumb' ? COLORS.inkDeep : COLORS.ink,
+    accent: item => (item.type === 'thumb' ? COLORS.inkDeep : COLORS.ink),
     durationMs: EXIT_DURATION,
     startOffset: '0%',
     endOffset: '100%',
@@ -141,10 +140,20 @@ const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
 }
 
 export default function DefineDispatchVisual() {
-  const { items, completedCount, cycle, uploadState, uploadCueActive } = usePipelineSimulation()
+  const {
+    items,
+    completedCount,
+    cycle,
+    uploadState,
+    uploadCueActive,
+    thumbCompletedCount,
+    labelCompletedCount,
+  } = usePipelineSimulation()
   const pathLengths = usePathLengths(PATHS)
   const isUploading = uploadState.phase === 'upload'
   const uploadIconColor = uploadCueActive ? COLORS.muted : COLORS.outline
+  const galleryThumbCount = Math.min(thumbCompletedCount, INITIAL_ITEMS)
+  const galleryLabelCount = Math.min(labelCompletedCount, galleryThumbCount)
 
   // Pre-calculate queues
   const preprocessQueue = items
@@ -212,7 +221,7 @@ export default function DefineDispatchVisual() {
             width="540"
             height="340"
           >
-            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feGaussianBlur stdDeviation="1" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -281,7 +290,6 @@ export default function DefineDispatchVisual() {
             isActive={thumbActiveDisplay > 0}
             activeWorkers={thumbActiveDisplay}
             maxWorkers={THUMB_WORKERS}
-            variant="pool"
           />
           <MachineNode
             x={NODES.inferCenter.x}
@@ -293,7 +301,6 @@ export default function DefineDispatchVisual() {
             isActive={isInferenceProcessing}
             activeWorkers={inferenceActiveDisplay}
             maxWorkers={INFERENCE_WORKERS}
-            variant="singleton"
             queueLen={inferenceQueueLen}
           />
 
@@ -345,11 +352,13 @@ export default function DefineDispatchVisual() {
               fill={COLORS.surface}
               stroke={COLORS.outline}
             />
-            <TextOverlay
-              x={NODES.end.width / 2}
-              y={NODES.end.height / 2 + 4}
-              text={String(completedCount)}
-              color={COLORS.textStrong}
+            <GalleryGrid
+              width={NODES.end.width}
+              height={NODES.end.height}
+              totalCount={INITIAL_ITEMS}
+              thumbnailsFilled={galleryThumbCount}
+              labelsFilled={galleryLabelCount}
+              color={COLORS.muted}
             />
           </g>
         </g>
@@ -580,7 +589,6 @@ function MachineNode({
   radius,
   label,
   isActive,
-  variant,
   activeWorkers = 0,
   maxWorkers = activeWorkers,
   queueLen = 0,
@@ -592,13 +600,12 @@ function MachineNode({
   radius: number
   label: string
   isActive: boolean
-  variant?: 'pool' | 'singleton'
   activeWorkers?: number
   maxWorkers?: number
   queueLen?: number
 }) {
   // Node appearance encodes load and activity
-  let fillColor: string = COLORS.surface
+  const fillColor: string = COLORS.surface
   let strokeColor: string = COLORS.outline
 
   const pressure = queueLen / Math.max(1, maxWorkers)
@@ -658,19 +665,86 @@ function MachineNode({
   )
 }
 
-function TextOverlay({ x, y, text, color }: { x: number; y: number; text: string; color: string }) {
+function GalleryGrid({
+  width,
+  height,
+  totalCount,
+  thumbnailsFilled,
+  labelsFilled,
+  color,
+}: {
+  width: number
+  height: number
+  totalCount: number
+  thumbnailsFilled: number
+  labelsFilled: number
+  color: string
+}) {
+  if (totalCount <= 0) return null
+
+  const columns = Math.max(1, Math.ceil(Math.sqrt(totalCount)))
+  const rows = Math.max(1, Math.ceil(totalCount / columns))
+  const padding = 8
+  const gridWidth = Math.max(0, width - padding * 2)
+  const gridHeight = Math.max(0, height - padding * 2)
+  const cellWidth = gridWidth / columns
+  const cellHeight = gridHeight / rows
+  const thumbWidth = cellWidth * 0.8
+  const thumbHeight = cellHeight * 0.6
+  const labelWidth = cellWidth * 0.6
+  const labelHeight = Math.max(2, cellHeight * 0.16)
+  const labelOffsetY = cellHeight * 0.72
+  const rowOffsets = Array.from({ length: rows }).map((_, rowIndex) => {
+    const visibleInRow = Math.min(columns, Math.max(0, thumbnailsFilled - rowIndex * columns))
+    return ((columns - visibleInRow) * cellWidth) / 2
+  })
+
   return (
-    <text
-      x={x}
-      y={y}
-      textAnchor="middle"
-      fill={color}
-      fontSize="11"
-      fontWeight="bold"
-      style={{ userSelect: 'none' }}
-    >
-      {text}
-    </text>
+    <g transform={`translate(${padding}, ${padding})`}>
+      {Array.from({ length: totalCount }).map((_, index) => {
+        const col = index % columns
+        const row = Math.floor(index / columns)
+        const rowOffset = rowOffsets[row] ?? 0
+        const x = rowOffset + col * cellWidth + (cellWidth - thumbWidth) / 2
+        const y = row * cellHeight + (cellHeight - thumbHeight) / 2 - cellHeight * 0.1
+        const showThumb = index < thumbnailsFilled
+        const showLabel = index < labelsFilled
+
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static grid, no reordering
+          <g key={index}>
+            {showThumb ? (
+              <rect
+                x={x}
+                y={y}
+                width={thumbWidth}
+                height={thumbHeight}
+                rx={Math.max(2, thumbHeight * 0.15)}
+                fill="none"
+                stroke={color}
+                strokeWidth={0.5}
+                opacity={0.7}
+              />
+            ) : null}
+            {/* there should be a small gap between the thumb and label */}
+            {/* we achieve this by offsetting the label's y position */}
+            {showLabel ? (
+              <rect
+                x={rowOffset + col * cellWidth + (cellWidth - labelWidth) / 2}
+                y={row * cellHeight + labelOffsetY + 2}
+                width={labelWidth}
+                height={labelHeight}
+                rx={labelHeight / 2}
+                fill={color}
+                stroke="none"
+                strokeWidth={0.5}
+                opacity={0.7}
+              />
+            ) : null}
+          </g>
+        )
+      })}
+    </g>
   )
 }
 

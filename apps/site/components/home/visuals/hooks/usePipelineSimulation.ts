@@ -49,6 +49,8 @@ export const usePipelineSimulation = () => {
   const [items, setItems] = useState<PipelineItem[]>([])
   const [inputCount, setInputCount] = useState(INITIAL_ITEMS)
   const [completedCount, setCompletedCount] = useState(0)
+  const [thumbCompletedCount, setThumbCompletedCount] = useState(0)
+  const [labelCompletedCount, setLabelCompletedCount] = useState(0)
   const [cycle, setCycle] = useState(0)
   const [uploadState, setUploadState] = useState<UploadState>({ phase: 'upload' })
   const [uploadCueActive, setUploadCueActive] = useState(true)
@@ -184,8 +186,6 @@ export const usePipelineSimulation = () => {
           // Inference Process -> Done
           if (item.stage === 'inference-process' && elapsed > INFERENCE_DURATION) {
             hasChanges = true
-            // Each original item completes twice (infer + thumb), so count half.
-            setCompletedCount(c => c + 0.5)
             return { ...item, stage: 'done', enteredStageAt: now }
           }
 
@@ -209,8 +209,6 @@ export const usePipelineSimulation = () => {
           // Thumbnail Process -> Done
           if (item.stage === 'thumb-process' && elapsed > THUMB_DURATION) {
             hasChanges = true
-            // Each original item completes twice (infer + thumb), so count half.
-            setCompletedCount(c => c + 0.5)
             return { ...item, stage: 'done', enteredStageAt: now }
           }
 
@@ -219,13 +217,31 @@ export const usePipelineSimulation = () => {
 
         // --- 3. CLEANUP & LOOP ---
         // Remove completed items after their exit animation.
+        let completedDelta = 0
+        let thumbDelta = 0
+        let labelDelta = 0
         const finalItems = [...processedItems, ...newItems].filter(item => {
           // Allow done items to animate off-screen before removal.
           if (item.stage === 'done') {
-            if (now - item.enteredStageAt > EXIT_DURATION) return false
+            if (now - item.enteredStageAt > EXIT_DURATION) {
+              completedDelta += 0.5
+              if (item.type === 'thumb') thumbDelta += 1
+              if (item.type === 'inference') labelDelta += 1
+              return false
+            }
           }
           return true
         })
+
+        if (completedDelta > 0) {
+          setCompletedCount(c => c + completedDelta)
+        }
+        if (thumbDelta > 0) {
+          setThumbCompletedCount(c => c + thumbDelta)
+        }
+        if (labelDelta > 0) {
+          setLabelCompletedCount(c => c + labelDelta)
+        }
 
         if (!hasChanges && newItems.length === 0 && finalItems.length === prevItems.length)
           return prevItems
@@ -243,6 +259,8 @@ export const usePipelineSimulation = () => {
         // Reset simulation state for the next loop.
         setInputCount(INITIAL_ITEMS)
         setCompletedCount(0)
+        setThumbCompletedCount(0)
+        setLabelCompletedCount(0)
         nextId.current = 0
         lastEntryTime.current = 0
         setCycle(current => current + 1)
@@ -254,6 +272,8 @@ export const usePipelineSimulation = () => {
   return {
     items,
     completedCount: Math.floor(completedCount),
+    thumbCompletedCount,
+    labelCompletedCount,
     cycle,
     uploadState,
     uploadCueActive,
