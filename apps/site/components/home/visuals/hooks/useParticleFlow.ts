@@ -7,26 +7,30 @@ export type Particle = {
   vx: number
   vy: number
   inConduit: boolean
+  claimed: boolean
   opacity: number
+  phase: number
+  wobbleRate: number
+  wobbleAmp: number
 }
 
 // Dimensions
 const WIDTH = 500
-const HEIGHT = 200
+const HEIGHT = 180
 
 // All positions as ratios of WIDTH/HEIGHT
-const MARGIN_RATIO = 0.04 // 4% margin top/bottom
+const MARGIN_RATIO = 0.05
 const Y_MARGIN = HEIGHT * MARGIN_RATIO
 const CENTER_Y = HEIGHT / 2
 
 // Zone X boundaries as ratios: []>=<[]
 const ZONE_RATIOS = {
-  freeEnd: 0.32, // Free zone ends at 32% - wider mouth
-  conduitStart: 0.4, // Entry funnel ends, conduit starts at 40% - shorter funnel
-  conduitEnd: 0.6, // Conduit ends at 60%
-  arrivedStart: 0.68, // Exit funnel ends at 68% - shorter funnel, wider mouth
-  fadeInEnd: 0.05, // Fade in complete by 5%
-  fadeOutStart: 0.94, // Start fading out at 94%
+  freeEnd: 0.32,
+  conduitStart: 0.4,
+  conduitEnd: 0.6,
+  arrivedStart: 0.68,
+  fadeInEnd: 0.05,
+  fadeOutStart: 0.94,
 }
 
 const ZONES = {
@@ -35,7 +39,7 @@ const ZONES = {
   conduitStart: WIDTH * ZONE_RATIOS.conduitStart,
   conduitEnd: WIDTH * ZONE_RATIOS.conduitEnd,
   arrivedStart: WIDTH * ZONE_RATIOS.arrivedStart,
-  arrivedEnd: WIDTH * 1.04, // Slightly past edge for exit
+  arrivedEnd: WIDTH * 1.04,
   fadeInEnd: WIDTH * ZONE_RATIOS.fadeInEnd,
   fadeOutStart: WIDTH * ZONE_RATIOS.fadeOutStart,
 }
@@ -43,31 +47,46 @@ const ZONES = {
 // Funnel geometry as ratios of available height
 const AVAILABLE_HEIGHT = HEIGHT - Y_MARGIN * 2
 const FREE_ZONE_HALF_HEIGHT = AVAILABLE_HEIGHT / 2
-const CONDUIT_HALF_HEIGHT_RATIO = 0.1 // Conduit is 20% of total height
+const CONDUIT_HALF_HEIGHT_RATIO = 0.1
 const CONDUIT_HALF_HEIGHT = HEIGHT * CONDUIT_HALF_HEIGHT_RATIO
 
-// Capacity
-const CONDUIT_CAPACITY = 12
-const MAX_PARTICLES = 200
+// Capacity + tuning
+const CONDUIT_CAPACITY = 10
+const MAX_PARTICLES = 280
+const INITIAL_PARTICLES = 180
+const HOLD_ZONE_WIDTH = 90
+const HOLD_ZONE_START = ZONES.freeEnd - HOLD_ZONE_WIDTH
 
 // Timing
-const TICK_MS = 20
-const SPAWN_INTERVAL_MS = 70
+const TICK_MS = 30
+const SPAWN_INTERVAL_MS = 45
 
-// Physics
-const BASE_SPEED = 0.8
-const FRICTION = 0.997
-const BOUNCE_DAMPING = 0.5 // Much more energy loss on bounce
-const DRIFT_FORCE = 0.008 // Gentle constant pull toward/away from conduit
-const CONDUIT_CENTERING = 0.012
-const SPREAD_STRENGTH = 0.015 // For exit funnel spreading
-// Speed limits - particles slow down as they approach conduit
-const SPEED_FAR = 1.2 // Max speed far from conduit
-const SPEED_NEAR = 0.25 // Max speed near conduit entrance
+// Motion
+const DRIFT_FREE = 0
+const DRIFT_CONDUIT = 1.5
+const DRIFT_ARRIVED = 0.9
+const FRICTION = 0.985
+const CENTER_PULL = 0.02
+const CENTER_PULL_MIN = 0.004
+const WOBBLE_BASE = 0.6
+const SPREAD_FORCE_EXIT = 0.004
+const SPREAD_FORCE_ARRIVED = 0.0025
+const VX_EASE = 0.07
+const VY_EASE = 0.08
+const WAIT_X_WOBBLE = 0.05
 
-// Fade distances as ratios
+// Fade distances
 const FADE_IN_DISTANCE = WIDTH * 0.05
 const FADE_OUT_DISTANCE = WIDTH * 0.1
+
+type FlowZone = 'free' | 'entry-funnel' | 'conduit' | 'exit-funnel' | 'arrived'
+
+type YBounds = {
+  minY: number
+  maxY: number
+  halfHeight: number
+  zone: FlowZone
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -75,101 +94,6 @@ function clamp(value: number, min: number, max: number): number {
 
 function randomInRange(min: number, max: number): number {
   return min + Math.random() * (max - min)
-}
-
-function randomVelocity(speed: number): { vx: number; vy: number } {
-  const angle = Math.random() * Math.PI * 2
-  return {
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
-  }
-}
-
-// Get Y bounds at any X position based on the []>=<[] shape
-function getYBounds(x: number): {
-  minY: number
-  maxY: number
-  zone: 'free' | 'entry-funnel' | 'conduit' | 'exit-funnel' | 'arrived'
-} {
-  const fullMin = Y_MARGIN
-  const fullMax = HEIGHT - Y_MARGIN
-  const conduitMin = CENTER_Y - CONDUIT_HALF_HEIGHT
-  const conduitMax = CENTER_Y + CONDUIT_HALF_HEIGHT
-
-  // Free zone - full height
-  if (x <= ZONES.freeEnd) {
-    return { minY: fullMin, maxY: fullMax, zone: 'free' }
-  }
-
-  // Entry funnel ">" - narrows linearly
-  if (x <= ZONES.conduitStart) {
-    const t = (x - ZONES.freeEnd) / (ZONES.conduitStart - ZONES.freeEnd)
-    const halfHeight = FREE_ZONE_HALF_HEIGHT + (CONDUIT_HALF_HEIGHT - FREE_ZONE_HALF_HEIGHT) * t
-    return {
-      minY: CENTER_Y - halfHeight,
-      maxY: CENTER_Y + halfHeight,
-      zone: 'entry-funnel',
-    }
-  }
-
-  // Conduit "=" - narrow passage
-  if (x <= ZONES.conduitEnd) {
-    return { minY: conduitMin, maxY: conduitMax, zone: 'conduit' }
-  }
-
-  // Exit funnel "<" - expands linearly
-  if (x <= ZONES.arrivedStart) {
-    const t = (x - ZONES.conduitEnd) / (ZONES.arrivedStart - ZONES.conduitEnd)
-    const halfHeight = CONDUIT_HALF_HEIGHT + (FREE_ZONE_HALF_HEIGHT - CONDUIT_HALF_HEIGHT) * t
-    return {
-      minY: CENTER_Y - halfHeight,
-      maxY: CENTER_Y + halfHeight,
-      zone: 'exit-funnel',
-    }
-  }
-
-  // Arrived zone - full height
-  return { minY: fullMin, maxY: fullMax, zone: 'arrived' }
-}
-
-// Calculate the normal vector for funnel walls (for bouncing)
-function getFunnelNormal(_x: number, y: number, zone: string): { nx: number; ny: number } | null {
-  if (zone === 'entry-funnel') {
-    // ">" shape - walls angle inward
-    if (y < CENTER_Y) {
-      // Top wall: normal points down-left
-      return { nx: -0.7, ny: 0.7 }
-    } else {
-      // Bottom wall: normal points up-left
-      return { nx: -0.7, ny: -0.7 }
-    }
-  }
-  if (zone === 'exit-funnel') {
-    // "<" shape - walls angle outward
-    if (y < CENTER_Y) {
-      // Top wall: normal points down-right
-      return { nx: 0.7, ny: 0.7 }
-    } else {
-      // Bottom wall: normal points up-right
-      return { nx: 0.7, ny: -0.7 }
-    }
-  }
-  return null
-}
-
-function reflectVelocity(
-  vx: number,
-  vy: number,
-  nx: number,
-  ny: number,
-  damping: number
-): { vx: number; vy: number } {
-  // v' = v - 2(v·n)n
-  const dot = vx * nx + vy * ny
-  return {
-    vx: (vx - 2 * dot * nx) * damping,
-    vy: (vy - 2 * dot * ny) * damping,
-  }
 }
 
 function computeOpacity(x: number): number {
@@ -182,74 +106,59 @@ function computeOpacity(x: number): number {
   return 1
 }
 
-function createParticle(x?: number, y?: number, vx?: number, vy?: number): Particle {
-  const pos = {
-    x: x ?? randomInRange(5, 15),
-    y: y ?? randomInRange(Y_MARGIN + 15, HEIGHT - Y_MARGIN - 15),
-  }
-  const vel =
-    vx !== undefined && vy !== undefined
-      ? { vx, vy }
-      : randomVelocity(BASE_SPEED * (0.5 + Math.random() * 0.5))
+function getYBounds(x: number): YBounds {
+  const fullMin = Y_MARGIN
+  const fullMax = HEIGHT - Y_MARGIN
+  const conduitMin = CENTER_Y - CONDUIT_HALF_HEIGHT
+  const conduitMax = CENTER_Y + CONDUIT_HALF_HEIGHT
 
+  if (x <= ZONES.freeEnd) {
+    return { minY: fullMin, maxY: fullMax, halfHeight: FREE_ZONE_HALF_HEIGHT, zone: 'free' }
+  }
+
+  if (x <= ZONES.conduitStart) {
+    const t = (x - ZONES.freeEnd) / (ZONES.conduitStart - ZONES.freeEnd)
+    const halfHeight = FREE_ZONE_HALF_HEIGHT + (CONDUIT_HALF_HEIGHT - FREE_ZONE_HALF_HEIGHT) * t
+    return { minY: CENTER_Y - halfHeight, maxY: CENTER_Y + halfHeight, halfHeight, zone: 'entry-funnel' }
+  }
+
+  if (x <= ZONES.conduitEnd) {
+    return { minY: conduitMin, maxY: conduitMax, halfHeight: CONDUIT_HALF_HEIGHT, zone: 'conduit' }
+  }
+
+  if (x <= ZONES.arrivedStart) {
+    const t = (x - ZONES.conduitEnd) / (ZONES.arrivedStart - ZONES.conduitEnd)
+    const halfHeight = CONDUIT_HALF_HEIGHT + (FREE_ZONE_HALF_HEIGHT - CONDUIT_HALF_HEIGHT) * t
+    return { minY: CENTER_Y - halfHeight, maxY: CENTER_Y + halfHeight, halfHeight, zone: 'exit-funnel' }
+  }
+
+  return { minY: fullMin, maxY: fullMax, halfHeight: FREE_ZONE_HALF_HEIGHT, zone: 'arrived' }
+}
+
+function createParticle(x?: number, y?: number): Particle {
   return {
     id: crypto.randomUUID(),
-    ...pos,
-    ...vel,
+    x: x ?? randomInRange(6, 18),
+    y: y ?? randomInRange(Y_MARGIN + 8, HEIGHT - Y_MARGIN - 8),
+    vx: randomInRange(0.2, 0.7),
+    vy: randomInRange(-0.2, 0.2),
     inConduit: false,
+    claimed: false,
     opacity: x !== undefined ? 1 : 0,
+    phase: Math.random() * Math.PI * 2,
+    wobbleRate: randomInRange(0.4, 0.9),
+    wobbleAmp: randomInRange(0.25, 0.6),
   }
 }
 
 function createInitialParticles(): Particle[] {
   const particles: Particle[] = []
-
-  // Dense cloud in free zone
-  for (let i = 0; i < 80; i++) {
-    const x = randomInRange(10, ZONES.freeEnd - 10)
-    const y = randomInRange(Y_MARGIN + 10, HEIGHT - Y_MARGIN - 10)
-    const vel = randomVelocity(BASE_SPEED * (0.4 + Math.random() * 0.6))
-    particles.push(createParticle(x, y, vel.vx, vel.vy))
-  }
-
-  // Some in entry funnel
-  for (let i = 0; i < 10; i++) {
-    const x = randomInRange(ZONES.freeEnd + 10, ZONES.conduitStart - 10)
+  for (let i = 0; i < INITIAL_PARTICLES; i++) {
+    const x = randomInRange(8, Math.max(12, ZONES.freeEnd - 8))
     const bounds = getYBounds(x)
-    const y = randomInRange(bounds.minY + 5, bounds.maxY - 5)
-    const vel = { vx: BASE_SPEED * 0.5, vy: (Math.random() - 0.5) * 0.3 }
-    particles.push(createParticle(x, y, vel.vx, vel.vy))
+    const y = randomInRange(bounds.minY + 4, bounds.maxY - 4)
+    particles.push(createParticle(x, y))
   }
-
-  // Some in conduit
-  for (let i = 0; i < 8; i++) {
-    const x = randomInRange(ZONES.conduitStart + 10, ZONES.conduitEnd - 10)
-    const bounds = getYBounds(x)
-    const y = randomInRange(bounds.minY + 3, bounds.maxY - 3)
-    const p = createParticle(x, y, BASE_SPEED * 0.6, 0)
-    p.inConduit = true
-    particles.push(p)
-  }
-
-  // Some in exit funnel
-  for (let i = 0; i < 6; i++) {
-    const x = randomInRange(ZONES.conduitEnd + 10, ZONES.arrivedStart - 10)
-    const bounds = getYBounds(x)
-    const y = randomInRange(bounds.minY + 5, bounds.maxY - 5)
-    const spreadDir = y < CENTER_Y ? -1 : 1
-    const vel = { vx: BASE_SPEED * 0.6, vy: spreadDir * Math.random() * 0.5 }
-    particles.push(createParticle(x, y, vel.vx, vel.vy))
-  }
-
-  // Some in arrived zone
-  for (let i = 0; i < 10; i++) {
-    const x = randomInRange(ZONES.arrivedStart + 10, ZONES.fadeOutStart - 20)
-    const y = randomInRange(Y_MARGIN + 15, HEIGHT - Y_MARGIN - 15)
-    const vel = randomVelocity(BASE_SPEED * 0.3)
-    vel.vx = Math.abs(vel.vx) * 0.3 + 0.2
-    particles.push(createParticle(x, y, vel.vx, vel.vy))
-  }
-
   return particles
 }
 
@@ -260,6 +169,7 @@ export function useParticleFlow() {
   const [particles, setParticles] = useState<Particle[]>(createInitialParticles)
   const lastSpawnTime = useRef(0)
   const isVisibleRef = useRef(true)
+  const reduceMotionRef = useRef(false)
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -274,190 +184,125 @@ export function useParticleFlow() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const handleChange = () => {
+      reduceMotionRef.current = mediaQuery.matches
+    }
+    handleChange()
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+    mediaQuery.addListener(handleChange)
+    return () => mediaQuery.removeListener(handleChange)
+  }, [])
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (!isVisibleRef.current) return
+      if (!isVisibleRef.current || reduceMotionRef.current) return
       const now = Date.now()
+      const time = now / 1000
 
       setParticles(prevParticles => {
-        let particles = [...prevParticles]
-        let conduitCount = particles.filter(p => p.inConduit).length
+        let updated = prevParticles.map(p => ({ ...p }))
+
+        // Release conduit slots once particles exit, and keep inConduit aligned to position.
+        updated.forEach(p => {
+          if (p.claimed && p.x > ZONES.conduitEnd) {
+            p.claimed = false
+            p.inConduit = false
+            return
+          }
+          p.inConduit = p.claimed && p.x >= ZONES.conduitStart && p.x <= ZONES.conduitEnd
+        })
+
+        let conduitCount = updated.filter(p => p.claimed).length
+        let slotsOpen = Math.max(0, CONDUIT_CAPACITY - conduitCount)
+
+        if (slotsOpen > 0) {
+          const selectionPool = updated
+            .filter(p => !p.claimed && p.x >= HOLD_ZONE_START && p.x <= ZONES.conduitStart + 6)
+            .sort((a, b) => b.x - a.x)
+            .slice(0, slotsOpen)
+          for (const particle of selectionPool) {
+            particle.claimed = true
+            conduitCount += 1
+            slotsOpen -= 1
+            if (slotsOpen <= 0) break
+          }
+        }
 
         // Spawn new particles at left edge
-        if (now - lastSpawnTime.current > SPAWN_INTERVAL_MS && particles.length < MAX_PARTICLES) {
-          particles.push(createParticle())
+        if (now - lastSpawnTime.current > SPAWN_INTERVAL_MS && updated.length < MAX_PARTICLES) {
+          updated.push(createParticle())
           lastSpawnTime.current = now
         }
 
-        particles = particles.map(p => {
-          const updated = { ...p }
-          const bounds = getYBounds(updated.x)
+        updated = updated.map(p => {
+          const next = { ...p }
+          const bounds = getYBounds(next.x)
           const { zone } = bounds
+          const narrowness = 1 - bounds.halfHeight / FREE_ZONE_HALF_HEIGHT
 
-          // === CONDUIT CLAIMING ===
-          const inConduitZone = zone === 'conduit'
-          if (!updated.inConduit && inConduitZone) {
-            if (conduitCount < CONDUIT_CAPACITY) {
-              updated.inConduit = true
-              conduitCount++
-            }
-          }
-          if (updated.inConduit && zone !== 'conduit') {
-            updated.inConduit = false
+          const isSelected = next.claimed && !next.inConduit
+          let targetVx = DRIFT_FREE
+          if (next.inConduit || next.claimed) {
+            targetVx = DRIFT_CONDUIT
+          } else if (next.x >= ZONES.conduitEnd) {
+            targetVx = DRIFT_ARRIVED
           }
 
-          // === PHYSICS ===
-          let ax = 0
-          let ay = 0
-          let maxSpeed = SPEED_FAR
 
-          // Symmetric drift + speed limit based on distance from conduit
-          if (updated.x < ZONES.conduitStart) {
-            // LEFT SIDE: Vacuum pulls toward conduit
-            ax = DRIFT_FORCE
-            // Speed limit inversely proportional to distance from conduit
-            const distToConduit = ZONES.conduitStart - updated.x
-            const maxDist = ZONES.conduitStart
-            const t = distToConduit / maxDist // 1 at far left, 0 at conduit
-            maxSpeed = SPEED_NEAR + (SPEED_FAR - SPEED_NEAR) * t
-            // Slight pull toward center Y, increasing near conduit
-            const dy = CENTER_Y - updated.y
-            ay = dy * 0.003 * (1 - t)
-          } else if (updated.x > ZONES.conduitEnd) {
-            // RIGHT SIDE: Push away from conduit (symmetric)
-            ax = DRIFT_FORCE
-            // Speed limit inversely proportional to distance from conduit
-            const distFromConduit = updated.x - ZONES.conduitEnd
-            const maxDist = ZONES.arrivedEnd - ZONES.conduitEnd
-            const t = distFromConduit / maxDist // 0 near conduit, 1 at far right
-            maxSpeed = SPEED_NEAR + (SPEED_FAR - SPEED_NEAR) * t
+          let wobbleAmp = next.wobbleAmp
+          if (zone === 'exit-funnel') wobbleAmp *= 1.4
+          if (zone === 'arrived') wobbleAmp *= 1.6
+          const wobble = Math.sin(time * next.wobbleRate + next.phase) * wobbleAmp
+          const centerPullScale = !next.claimed && next.x >= HOLD_ZONE_START ? 0.65 : 1
+          const baseCenterPull = zone === 'free' ? 0 : CENTER_PULL_MIN + narrowness * CENTER_PULL
+          const centerPull = baseCenterPull * centerPullScale
+          const spreadScale = (next.y - CENTER_Y) / Math.max(1, FREE_ZONE_HALF_HEIGHT)
+          const spreadForce =
+            zone === 'exit-funnel' ? SPREAD_FORCE_EXIT : zone === 'arrived' ? SPREAD_FORCE_ARRIVED : 0
+          const targetVy =
+            (CENTER_Y - next.y) * centerPull +
+            wobble * (1 - narrowness) * WOBBLE_BASE +
+            spreadScale * spreadForce
+
+          if (!next.claimed && next.x < ZONES.conduitEnd) {
+            const xWobble = Math.sin(time * 0.35 + next.phase * 1.7) * WAIT_X_WOBBLE
+            next.vx += xWobble
           }
 
-          // Zone-specific adjustments
-          if (zone === 'free') {
-            // Add small random perturbations
-            ax += (Math.random() - 0.5) * 0.004
-            ay += (Math.random() - 0.5) * 0.004
-          } else if (zone === 'entry-funnel') {
-            // Pull toward center Y in funnel
-            const dy = CENTER_Y - updated.y
-            ay += dy * 0.008
-          } else if (zone === 'conduit') {
-            if (updated.inConduit) {
-              // In conduit: gentle centering, maintain moderate speed
-              const dy = CENTER_Y - updated.y
-              ay = dy * CONDUIT_CENTERING
-              maxSpeed = SPEED_NEAR * 1.5 // Slightly faster in conduit
-              if (updated.vx < SPEED_NEAR) {
-                updated.vx = SPEED_NEAR
-              }
-            } else {
-              // Not in conduit but in conduit zone - slow to a crawl
-              maxSpeed = SPEED_NEAR * 0.5
-              ax = -0.002 // Very gentle push back
-            }
-          } else if (zone === 'exit-funnel') {
-            // Particles spread out as funnel expands
-            const spreadDir = updated.y < CENTER_Y ? -1 : 1
-            ay += spreadDir * SPREAD_STRENGTH
-          } else if (zone === 'arrived') {
-            // Small random perturbations like free zone
-            ax += (Math.random() - 0.5) * 0.004
-            ay += (Math.random() - 0.5) * 0.004
+          next.vx += (targetVx - next.vx) * VX_EASE
+          next.vy += (targetVy - next.vy) * VY_EASE
+
+          next.vx *= FRICTION
+          next.vy *= FRICTION
+
+          next.x += next.vx
+          next.y += next.vy
+
+          if (!next.claimed && next.x >= ZONES.conduitStart && next.x < ZONES.conduitEnd) {
+            next.x = ZONES.conduitStart - 0.5
+            next.vx = 0
           }
 
-          // Apply acceleration
-          updated.vx += ax
-          updated.vy += ay
+          const nextBounds = getYBounds(next.x)
+          next.y = clamp(next.y, nextBounds.minY + 1, nextBounds.maxY - 1)
 
-          // Apply friction
-          updated.vx *= FRICTION
-          updated.vy *= FRICTION
 
-          // Cap speed based on distance from conduit (creates natural compression)
-          const speed = Math.sqrt(updated.vx * updated.vx + updated.vy * updated.vy)
-          if (speed > maxSpeed) {
-            const scale = maxSpeed / speed
-            updated.vx *= scale
-            updated.vy *= scale
+          if (next.x < 3) {
+            next.x = 3
+            next.vx = Math.abs(next.vx) * 0.3
           }
 
-          // Update position
-          updated.x += updated.vx
-          updated.y += updated.vy
-
-          // === BOUNDARY COLLISIONS ===
-          const newBounds = getYBounds(updated.x)
-
-          // Funnel wall collisions (diagonal bouncing)
-          if (
-            (newBounds.zone === 'entry-funnel' || newBounds.zone === 'exit-funnel') &&
-            (updated.y < newBounds.minY || updated.y > newBounds.maxY)
-          ) {
-            const normal = getFunnelNormal(updated.x, updated.y, newBounds.zone)
-            if (normal) {
-              const reflected = reflectVelocity(
-                updated.vx,
-                updated.vy,
-                normal.nx,
-                normal.ny,
-                BOUNCE_DAMPING
-              )
-              updated.vx = reflected.vx
-              updated.vy = reflected.vy
-            }
-            // Clamp position inside bounds
-            updated.y = clamp(updated.y, newBounds.minY + 1, newBounds.maxY - 1)
-          }
-
-          // Conduit walls (horizontal bounce)
-          if (newBounds.zone === 'conduit') {
-            if (updated.y < newBounds.minY) {
-              updated.y = newBounds.minY
-              updated.vy = Math.abs(updated.vy) * BOUNCE_DAMPING
-            } else if (updated.y > newBounds.maxY) {
-              updated.y = newBounds.maxY
-              updated.vy = -Math.abs(updated.vy) * BOUNCE_DAMPING
-            }
-          }
-
-          // Top/bottom walls (free and arrived zones)
-          if (newBounds.zone === 'free' || newBounds.zone === 'arrived') {
-            if (updated.y < newBounds.minY) {
-              updated.y = newBounds.minY
-              updated.vy = Math.abs(updated.vy) * BOUNCE_DAMPING
-            } else if (updated.y > newBounds.maxY) {
-              updated.y = newBounds.maxY
-              updated.vy = -Math.abs(updated.vy) * BOUNCE_DAMPING
-            }
-          }
-
-          // Left wall
-          if (updated.x < 3) {
-            updated.x = 3
-            updated.vx = Math.abs(updated.vx) * BOUNCE_DAMPING
-          }
-
-          // Right boundary of free zone - soft boundary that guides toward funnel
-          if (zone === 'free' && updated.x > ZONES.freeEnd - 5) {
-            // Check if particle would enter funnel bounds
-            const funnelBounds = getYBounds(ZONES.freeEnd + 1)
-            if (updated.y < funnelBounds.minY || updated.y > funnelBounds.maxY) {
-              // Bounce back - not aligned with funnel entrance
-              updated.x = ZONES.freeEnd - 5
-              updated.vx = -Math.abs(updated.vx) * BOUNCE_DAMPING * 0.5
-            }
-          }
-
-          // Update opacity
-          updated.opacity = computeOpacity(updated.x)
-
-          return updated
+          next.opacity = computeOpacity(next.x)
+          return next
         })
 
-        // Remove exited particles
-        particles = particles.filter(p => p.x < ZONES.arrivedEnd)
-
-        return particles
+        updated = updated.filter(p => p.x < ZONES.arrivedEnd)
+        return updated
       })
     }, TICK_MS)
 

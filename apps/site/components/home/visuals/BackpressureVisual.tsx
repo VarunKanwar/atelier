@@ -45,7 +45,9 @@ function ParticleElement({ particle, height }: { particle: Particle; height: num
       height={size}
       rx={radius}
       ry={radius}
-      fill={COLORS.particle}
+      fill="none"
+      stroke={COLORS.particle}
+      strokeWidth={1}
       opacity={clamp(particle.opacity, 0, 1)}
     />
   )
