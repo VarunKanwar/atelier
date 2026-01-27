@@ -6,78 +6,78 @@ export type Particle = {
   y: number
   vx: number
   vy: number
-  inConduit: boolean
   claimed: boolean
   opacity: number
   phase: number
   wobbleRate: number
   wobbleAmp: number
+  exitBias: number
 }
 
-// Dimensions
-const WIDTH = 500
-const HEIGHT = 180
+// Dimensions (SVG viewBox units)
+const WIDTH = 500 // x-axis units
+const HEIGHT = 180 // y-axis units
 
-// All positions as ratios of WIDTH/HEIGHT
-const MARGIN_RATIO = 0.05
-const Y_MARGIN = HEIGHT * MARGIN_RATIO
-const CENTER_Y = HEIGHT / 2
+// Layout ratios (unitless)
+const MARGIN_RATIO = 0.05 // fraction of HEIGHT used as top/bottom margin
+const Y_MARGIN = HEIGHT * MARGIN_RATIO // units
+const CENTER_Y = HEIGHT / 2 // units
 
-// Zone X boundaries as ratios: []>=<[]
+// Zone X boundaries as ratios: []>=<[] (unitless fractions of WIDTH)
 const ZONE_RATIOS = {
-  freeEnd: 0.32,
-  conduitStart: 0.4,
-  conduitEnd: 0.6,
-  arrivedStart: 0.68,
-  fadeInEnd: 0.05,
-  fadeOutStart: 0.94,
+  freeEnd: 0.45, // end of free zone
+  conduitStart: 0.5, // funnel end / conduit start
+  conduitEnd: 0.6, // conduit end / exit funnel start
+  arrivedStart: 0.68, // exit funnel end / arrived start
+  fadeInEnd: 0.05, // opacity reaches 1
+  fadeOutStart: 0.94, // opacity begins fading
 }
 
+// Zone boundaries (units)
 const ZONES = {
-  freeStart: 0,
-  freeEnd: WIDTH * ZONE_RATIOS.freeEnd,
-  conduitStart: WIDTH * ZONE_RATIOS.conduitStart,
-  conduitEnd: WIDTH * ZONE_RATIOS.conduitEnd,
-  arrivedStart: WIDTH * ZONE_RATIOS.arrivedStart,
-  arrivedEnd: WIDTH * 1.04,
-  fadeInEnd: WIDTH * ZONE_RATIOS.fadeInEnd,
-  fadeOutStart: WIDTH * ZONE_RATIOS.fadeOutStart,
+  freeEnd: WIDTH * ZONE_RATIOS.freeEnd, // units
+  conduitStart: WIDTH * ZONE_RATIOS.conduitStart, // units
+  conduitEnd: WIDTH * ZONE_RATIOS.conduitEnd, // units
+  arrivedStart: WIDTH * ZONE_RATIOS.arrivedStart, // units
+  arrivedEnd: WIDTH * 1.04, // units; spawn can exit slightly off-screen
+  fadeInEnd: WIDTH * ZONE_RATIOS.fadeInEnd, // units
+  fadeOutStart: WIDTH * ZONE_RATIOS.fadeOutStart, // units
 }
 
-// Funnel geometry as ratios of available height
-const AVAILABLE_HEIGHT = HEIGHT - Y_MARGIN * 2
-const FREE_ZONE_HALF_HEIGHT = AVAILABLE_HEIGHT / 2
-const CONDUIT_HALF_HEIGHT_RATIO = 0.1
-const CONDUIT_HALF_HEIGHT = HEIGHT * CONDUIT_HALF_HEIGHT_RATIO
+// Funnel geometry (units unless noted)
+const AVAILABLE_HEIGHT = HEIGHT - Y_MARGIN * 2 // units
+const FREE_ZONE_HALF_HEIGHT = AVAILABLE_HEIGHT / 2 // units
+const CONDUIT_HALF_HEIGHT_RATIO = 0.1 // unitless fraction of HEIGHT
+const CONDUIT_HALF_HEIGHT = HEIGHT * CONDUIT_HALF_HEIGHT_RATIO // units
 
-// Capacity + tuning
-const CONDUIT_CAPACITY = 10
-const MAX_PARTICLES = 280
-const INITIAL_PARTICLES = 180
-const HOLD_ZONE_WIDTH = 90
-const HOLD_ZONE_START = ZONES.freeEnd - HOLD_ZONE_WIDTH
+// Capacity + tuning (counts and units)
+const CONDUIT_CAPACITY = 15 // particles; max simultaneous claimed slots
+const MAX_PARTICLES = 280 // particles; global cap
+const INITIAL_PARTICLES = 180 // particles; initial seeding
+const HOLD_ZONE_WIDTH = 90 // units; region left of funnel used for selection
+const HOLD_ZONE_START = ZONES.freeEnd - HOLD_ZONE_WIDTH // units
 
-// Timing
-const TICK_MS = 30
-const SPAWN_INTERVAL_MS = 45
+// Timing (milliseconds)
+const TICK_MS = 30 // ms; simulation step interval
+const SPAWN_INTERVAL_MS = 45 // ms; new particle cadence
 
-// Motion
-const DRIFT_FREE = 0
-const DRIFT_CONDUIT = 1.5
-const DRIFT_ARRIVED = 0.9
-const FRICTION = 0.985
-const CENTER_PULL = 0.02
-const CENTER_PULL_MIN = 0.004
-const WOBBLE_BASE = 0.6
-const SPREAD_FORCE_EXIT = 0.004
-const SPREAD_FORCE_ARRIVED = 0.0025
-const VX_EASE = 0.07
-const VY_EASE = 0.08
-const WAIT_X_WOBBLE = 0.05
+// Motion (units per tick unless noted)
+const DRIFT_FREE = 0.25 // units/tick; x drift in free zone
+const DRIFT_CONDUIT = 1.5 // units/tick; x drift for claimed particles
+const DRIFT_ARRIVED = 0.9 // units/tick; x drift after conduit
+const FRICTION = 0.985 // unitless; velocity multiplier per tick
+const CENTER_PULL = 0.02 // 1/tick; centering strength at narrowest
+const CENTER_PULL_MIN = 0.004 // 1/tick; baseline centering
+const WOBBLE_BASE = 0.6 // units/tick; amplitude scale for y wobble
+const EXIT_PULL = 0.025 // 1/tick; steer toward exit bias in funnel
+const ARRIVED_PULL = 0.012 // 1/tick; steer toward exit bias in arrived zone
+const VX_EASE = 0.07 // 1/tick; x velocity easing factor
+const VY_EASE = 0.08 // 1/tick; y velocity easing factor
+const VELOCITY_JITTER = 0.02 // units/tick; random per-tick jitter magnitude
 
-// Fade distances
-const FADE_IN_DISTANCE = WIDTH * 0.05
-const FADE_OUT_DISTANCE = WIDTH * 0.1
+// Fade distances (units)
+const FADE_IN_DISTANCE = WIDTH * 0.1 // units; fade-in span
+const FADE_OUT_DISTANCE = WIDTH * 0.1 // units; fade-out span
 
 type FlowZone = 'free' | 'entry-funnel' | 'conduit' | 'exit-funnel' | 'arrived'
 
@@ -140,14 +140,14 @@ function createParticle(x?: number, y?: number): Particle {
     id: crypto.randomUUID(),
     x: x ?? randomInRange(6, 18),
     y: y ?? randomInRange(Y_MARGIN + 8, HEIGHT - Y_MARGIN - 8),
-    vx: randomInRange(0.2, 0.7),
+    vx: randomInRange(-0.2, 0.2),
     vy: randomInRange(-0.2, 0.2),
-    inConduit: false,
     claimed: false,
     opacity: x !== undefined ? 1 : 0,
     phase: Math.random() * Math.PI * 2,
     wobbleRate: randomInRange(0.4, 0.9),
     wobbleAmp: randomInRange(0.25, 0.6),
+    exitBias: 0,
   }
 }
 
@@ -164,6 +164,11 @@ function createInitialParticles(): Particle[] {
 
 export const PARTICLE_FLOW_DIMENSIONS = { width: WIDTH, height: HEIGHT }
 export const PARTICLE_FLOW_ZONES = ZONES
+export const PARTICLE_FLOW_GEOMETRY = {
+  centerY: CENTER_Y,
+  conduitHalfHeight: CONDUIT_HALF_HEIGHT,
+  yMargin: Y_MARGIN,
+}
 
 export function useParticleFlow() {
   const [particles, setParticles] = useState<Particle[]>(createInitialParticles)
@@ -207,27 +212,24 @@ export function useParticleFlow() {
       setParticles(prevParticles => {
         let updated = prevParticles.map(p => ({ ...p }))
 
-        // Release conduit slots once particles exit, and keep inConduit aligned to position.
+        // Release conduit slots once particles exit.
         updated.forEach(p => {
           if (p.claimed && p.x > ZONES.conduitEnd) {
             p.claimed = false
-            p.inConduit = false
-            return
+            p.exitBias = randomInRange(-1, 1)
           }
-          p.inConduit = p.claimed && p.x >= ZONES.conduitStart && p.x <= ZONES.conduitEnd
         })
 
-        let conduitCount = updated.filter(p => p.claimed).length
-        let slotsOpen = Math.max(0, CONDUIT_CAPACITY - conduitCount)
+        const claimedCount = updated.filter(p => p.claimed).length
+        let slotsOpen = Math.max(0, CONDUIT_CAPACITY - claimedCount)
 
         if (slotsOpen > 0) {
           const selectionPool = updated
-            .filter(p => !p.claimed && p.x >= HOLD_ZONE_START && p.x <= ZONES.conduitStart + 6)
+            .filter(p => !p.claimed && p.x >= ZONES.freeEnd && p.x < ZONES.conduitStart)
             .sort((a, b) => b.x - a.x)
             .slice(0, slotsOpen)
           for (const particle of selectionPool) {
             particle.claimed = true
-            conduitCount += 1
             slotsOpen -= 1
             if (slotsOpen <= 0) break
           }
@@ -245,9 +247,8 @@ export function useParticleFlow() {
           const { zone } = bounds
           const narrowness = 1 - bounds.halfHeight / FREE_ZONE_HALF_HEIGHT
 
-          const isSelected = next.claimed && !next.inConduit
           let targetVx = DRIFT_FREE
-          if (next.inConduit || next.claimed) {
+          if (next.claimed) {
             targetVx = DRIFT_CONDUIT
           } else if (next.x >= ZONES.conduitEnd) {
             targetVx = DRIFT_ARRIVED
@@ -261,21 +262,20 @@ export function useParticleFlow() {
           const centerPullScale = !next.claimed && next.x >= HOLD_ZONE_START ? 0.65 : 1
           const baseCenterPull = zone === 'free' ? 0 : CENTER_PULL_MIN + narrowness * CENTER_PULL
           const centerPull = baseCenterPull * centerPullScale
-          const spreadScale = (next.y - CENTER_Y) / Math.max(1, FREE_ZONE_HALF_HEIGHT)
-          const spreadForce =
-            zone === 'exit-funnel' ? SPREAD_FORCE_EXIT : zone === 'arrived' ? SPREAD_FORCE_ARRIVED : 0
+          const shouldSpread = !next.claimed && next.x >= ZONES.conduitEnd
+          const exitTargetY = CENTER_Y + next.exitBias * FREE_ZONE_HALF_HEIGHT
+          const exitPull = zone === 'exit-funnel' ? EXIT_PULL : zone === 'arrived' ? ARRIVED_PULL : 0
           const targetVy =
             (CENTER_Y - next.y) * centerPull +
             wobble * (1 - narrowness) * WOBBLE_BASE +
-            spreadScale * spreadForce
-
-          if (!next.claimed && next.x < ZONES.conduitEnd) {
-            const xWobble = Math.sin(time * 0.35 + next.phase * 1.7) * WAIT_X_WOBBLE
-            next.vx += xWobble
-          }
+            (shouldSpread ? (exitTargetY - next.y) * exitPull : 0)
 
           next.vx += (targetVx - next.vx) * VX_EASE
           next.vy += (targetVy - next.vy) * VY_EASE
+          const jitterX = (Math.random() - 0.5) * VELOCITY_JITTER
+          const jitterY = (Math.random() - 0.5) * VELOCITY_JITTER
+          next.vx += jitterX
+          next.vy += jitterY
 
           next.vx *= FRICTION
           next.vy *= FRICTION
