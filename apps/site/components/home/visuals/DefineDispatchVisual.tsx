@@ -1,6 +1,6 @@
 import { Box } from '@chakra-ui/react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   EXIT_DURATION,
   INFERENCE_DURATION,
@@ -146,20 +146,49 @@ export default function DefineDispatchVisual() {
   const galleryThumbCount = Math.min(thumbCompletedCount, INITIAL_ITEMS)
   const galleryLabelCount = Math.min(labelCompletedCount, galleryThumbCount)
 
-  // Pre-calculate queues
-  const preprocessQueue = items
-    .filter((i: PipelineItem) => i.stage === 'preprocess-queue')
-    .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
-  const inferQueue = items
-    .filter((i: PipelineItem) => i.stage === 'inference-queue')
-    .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
-  const thumbQueue = items
-    .filter((i: PipelineItem) => i.stage === 'thumb-queue')
-    .sort((a: PipelineItem, b: PipelineItem) => a.enteredStageAt - b.enteredStageAt)
+  const {
+    preprocessQueue,
+    inferQueue,
+    thumbQueue,
+    preprocessActive,
+    thumbActive,
+    inferenceActive,
+    preprocessIndex,
+    inferIndex,
+    thumbIndex,
+  } = useMemo(() => {
+    const preprocessQueue: PipelineItem[] = []
+    const inferQueue: PipelineItem[] = []
+    const thumbQueue: PipelineItem[] = []
+    let preprocessActive = 0
+    let thumbActive = 0
+    let inferenceActive = 0
 
-  const preprocessActive = items.filter((i: PipelineItem) => i.stage === 'preprocess').length
-  const thumbActive = items.filter((i: PipelineItem) => i.stage === 'thumb-process').length
-  const inferenceActive = items.filter((i: PipelineItem) => i.stage === 'inference-process').length
+    for (const item of items) {
+      if (item.stage === 'preprocess-queue') preprocessQueue.push(item)
+      else if (item.stage === 'inference-queue') inferQueue.push(item)
+      else if (item.stage === 'thumb-queue') thumbQueue.push(item)
+      else if (item.stage === 'preprocess') preprocessActive += 1
+      else if (item.stage === 'thumb-process') thumbActive += 1
+      else if (item.stage === 'inference-process') inferenceActive += 1
+    }
+
+    preprocessQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+    inferQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+    thumbQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+
+    return {
+      preprocessQueue,
+      inferQueue,
+      thumbQueue,
+      preprocessActive,
+      thumbActive,
+      inferenceActive,
+      preprocessIndex: new Map(preprocessQueue.map((item, index) => [item.id, index])),
+      inferIndex: new Map(inferQueue.map((item, index) => [item.id, index])),
+      thumbIndex: new Map(thumbQueue.map((item, index) => [item.id, index])),
+    }
+  }, [items])
   const preprocessActiveDisplay = useSteppedCount(preprocessActive, WORKER_STEP_MS)
   const thumbActiveDisplay = useSteppedCount(thumbActive, WORKER_STEP_MS)
   const inferenceActiveDisplay = useSteppedCount(inferenceActive, WORKER_STEP_MS)
@@ -207,11 +236,11 @@ export default function DefineDispatchVisual() {
             {items.map((item: PipelineItem) => {
               let queueIndex = -1
               if (item.stage === 'preprocess-queue') {
-                queueIndex = preprocessQueue.findIndex((i: PipelineItem) => i.id === item.id)
+                queueIndex = preprocessIndex.get(item.id) ?? -1
               } else if (item.stage === 'inference-queue') {
-                queueIndex = inferQueue.findIndex((i: PipelineItem) => i.id === item.id)
+                queueIndex = inferIndex.get(item.id) ?? -1
               } else if (item.stage === 'thumb-queue') {
-                queueIndex = thumbQueue.findIndex((i: PipelineItem) => i.id === item.id)
+                queueIndex = thumbIndex.get(item.id) ?? -1
               }
 
               return (
@@ -531,10 +560,24 @@ function Packet({
   const endPercent = clampOffset(Number.parseFloat(finalOffset))
   const startDash = -startPercent
   const endDash = -endPercent
+  const dashOffset = useMotionValue(startDash)
+
+  useEffect(() => {
+    dashOffset.set(startDash)
+    if (startDash === endDash) return
+    const controls = animate(dashOffset, endDash, { duration, ease: 'linear' })
+    return () => controls.stop()
+  }, [dashOffset, duration, endDash, startDash])
+  const dashStyle = { '--packet-dash': dashOffset } as CSSProperties
 
   return (
-    <g>
-      <motion.path
+    <motion.g
+      style={dashStyle}
+      initial={{ opacity: 0.9 }}
+      animate={{ opacity: 0.9 }}
+      exit={{ opacity: 0, transition: { duration: 0.1 } }}
+    >
+      <path
         d={path}
         pathLength={100}
         stroke={outerStroke}
@@ -542,18 +585,9 @@ function Packet({
         strokeWidth={PACKET_OUTER_WIDTH}
         strokeLinecap="round"
         strokeDasharray={dashArray}
-        initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
-        animate={{
-          strokeDashoffset: endDash,
-          opacity: 0.9,
-        }}
-        transition={{
-          duration: duration,
-          ease: 'linear',
-        }}
-        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+        strokeDashoffset="var(--packet-dash)"
       />
-      <motion.path
+      <path
         d={path}
         pathLength={100}
         stroke={innerStroke}
@@ -561,12 +595,9 @@ function Packet({
         strokeWidth={PACKET_INNER_WIDTH}
         strokeLinecap="round"
         strokeDasharray={dashArray}
-        initial={{ strokeDashoffset: startDash, opacity: 1 }}
-        animate={{ strokeDashoffset: endDash, opacity: 1 }}
-        transition={{ duration: duration, ease: 'linear' }}
-        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+        strokeDashoffset="var(--packet-dash)"
       />
-    </g>
+    </motion.g>
   )
 }
 
