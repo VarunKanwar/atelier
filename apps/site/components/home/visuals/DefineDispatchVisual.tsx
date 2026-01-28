@@ -26,15 +26,11 @@ import {
 
 const COLORS = {
   surface: '#fff',
-  outline: '#CBD5E1',
-  muted: '#9CA3AF',
-  textMuted: '#64748b',
-  textStrong: '#333',
-  ink: '#111827',
-  inkDeep: '#0B0F14',
-  warnStroke: '#D6A896',
-  dangerStroke: '#C58B78',
-  rainbowStops: ['#22d3ee', '#08090a', '#8b5cf6', '#ec4899', '#f97316', '#facc15'],
+  strokeBase: '#CBD5E1',
+  strokeActive: '#9CA3AF',
+  label: '#64748b',
+  ink: '#111827',  // Not used, needs a different name
+  inkDeep: '#0B0F14',   // Not used, needs a different name
 } as const
 
 // Layout anchors for the pipeline diagram in SVG coordinate space.
@@ -83,7 +79,6 @@ const PATHS = {
 
 type StageVisualConfig = {
   pathKey: keyof typeof PATHS | ((item: PipelineItem) => keyof typeof PATHS)
-  accent: string | ((item: PipelineItem) => string)
   durationMs: number
   startOffset?: string
   endOffset?: string
@@ -93,49 +88,42 @@ type StageVisualConfig = {
 const STAGE_VISUALS: Record<PipelineStage, StageVisualConfig> = {
   'preprocess-queue': {
     pathKey: 'intro',
-    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   preprocess: {
     pathKey: 'intro',
-    accent: COLORS.muted,
     durationMs: PREPROCESS_DURATION,
     startOffset: '95%',
     endOffset: '95%',
   },
   'thumb-queue': {
     pathKey: 'thumb',
-    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   'thumb-process': {
     pathKey: 'thumb',
-    accent: COLORS.inkDeep,
     durationMs: THUMB_DURATION,
     startOffset: '95%',
     endOffset: '95%',
   },
   'inference-queue': {
     pathKey: 'infer',
-    accent: COLORS.muted,
     durationMs: TRAVEL_DURATION,
     startOffset: '0%',
     queueOffset: index => `${Math.max(0, 95 - index * 3)}%`,
   },
   'inference-process': {
     pathKey: 'infer',
-    accent: COLORS.ink,
     durationMs: INFERENCE_DURATION,
     startOffset: '95%',
     endOffset: '95%',
   },
   done: {
     pathKey: item => (item.type === 'thumb' ? 'thumbExit' : 'inferExit'),
-    accent: item => (item.type === 'thumb' ? COLORS.inkDeep : COLORS.ink),
     durationMs: EXIT_DURATION,
     startOffset: '0%',
     endOffset: '100%',
@@ -154,7 +142,7 @@ export default function DefineDispatchVisual() {
   } = usePipelineSimulation()
   const pathLengths = usePathLengths(PATHS)
   const isUploading = uploadState.phase === 'upload'
-  const uploadIconColor = uploadCueActive ? COLORS.muted : COLORS.outline
+  const uploadIconColor = uploadCueActive ? COLORS.strokeActive : COLORS.strokeBase
   const galleryThumbCount = Math.min(thumbCompletedCount, INITIAL_ITEMS)
   const galleryLabelCount = Math.min(labelCompletedCount, galleryThumbCount)
 
@@ -198,12 +186,9 @@ export default function DefineDispatchVisual() {
         aria-label="Pipeline visualization showing task dispatching flow"
         role="img"
       >
-        <defs>
-        </defs>
-
         {/* --- DAG EDGES (Static Pipes) --- */}
         <g
-          stroke={COLORS.outline}
+          stroke={COLORS.strokeBase}
           fill="none"
           strokeWidth={STROKE_WIDTH_BASE}
           strokeLinecap="round"
@@ -217,7 +202,7 @@ export default function DefineDispatchVisual() {
 
         <g key={cycle}>
           {/* --- PACKETS --- */}
-          {/* Packets are animated as glowing path segments (dash offset). */}
+          {/* Packets are animated as path segments (dash offset). */}
           <AnimatePresence initial={false}>
             {items.map((item: PipelineItem) => {
               let queueIndex = -1
@@ -302,7 +287,7 @@ export default function DefineDispatchVisual() {
               height={NODES.start.height}
               rx={NODES.start.radius}
               fill={COLORS.surface}
-              stroke={COLORS.outline}
+              stroke={COLORS.strokeBase}
             />
             {isUploading ? (
               <UploadCue
@@ -337,7 +322,7 @@ export default function DefineDispatchVisual() {
               height={NODES.end.height}
               rx={NODES.end.radius}
               fill={COLORS.surface}
-              stroke={COLORS.outline}
+              stroke={COLORS.strokeBase}
             />
             <GalleryGrid
               width={NODES.end.width}
@@ -345,7 +330,7 @@ export default function DefineDispatchVisual() {
               totalCount={INITIAL_ITEMS}
               thumbnailsFilled={galleryThumbCount}
               labelsFilled={galleryLabelCount}
-              color={COLORS.muted}
+              color={COLORS.strokeActive}
             />
             <SvgLabel
               x={0}
@@ -371,7 +356,7 @@ const SvgLabel = ({ x, y, width, text }: { x: number; y: number; width: number; 
         justifyContent: 'center',
         fontSize: `${LABEL_FONT_SIZE}px`,
         lineHeight: '1',
-        color: COLORS.textMuted,
+        color: COLORS.label,
         fontWeight: 500,
       }}
     >
@@ -501,6 +486,29 @@ const getCenteredSlots = (count: number, max: number) => {
   return Array.from({ length: clamped }, (_, index) => start + index)
 }
 
+const hexToRgb = (hex: string) => {
+  const cleaned = hex.replace('#', '')
+  const value = Number.parseInt(cleaned, 16)
+  return {
+    r: (value >> 16) & 0xff,
+    g: (value >> 8) & 0xff,
+    b: value & 0xff,
+  }
+}
+
+const lerp = (start: number, end: number, t: number) => start + (end - start) * t
+
+const lerpColor = (from: string, to: string, t: number) => {
+  const a = hexToRgb(from)
+  const b = hexToRgb(to)
+  const r = Math.round(lerp(a.r, b.r, t))
+  const g = Math.round(lerp(a.g, b.g, t))
+  const bValue = Math.round(lerp(a.b, b.b, t))
+  return `#${r.toString(16).padStart(2, '0')}${g
+    .toString(16)
+    .padStart(2, '0')}${bValue.toString(16).padStart(2, '0')}`
+}
+
 const usePathLengths = (paths: Record<string, string>) => {
   const [lengths, setLengths] = useState<Record<string, number>>({})
 
@@ -530,7 +538,7 @@ function Packet({
   const config = STAGE_VISUALS[item.stage]
   const pathKey = typeof config.pathKey === 'function' ? config.pathKey(item) : config.pathKey
   const path = PATHS[pathKey]
-  const strokeColor = COLORS.muted
+  const strokeColor = COLORS.strokeActive
   const startOffset = config.startOffset ?? '0%'
   const finalOffset = config.queueOffset
     ? config.queueOffset(queueIndex)
@@ -560,12 +568,11 @@ function Packet({
         initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
         animate={{
           strokeDashoffset: endDash,
-          opacity: isProcess ? [0.9, 0.5, 0.9] : 0.9,
+          opacity: 0.9,
         }}
         transition={{
           duration: duration,
           ease: 'linear',
-          opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 },
         }}
         exit={{ opacity: 0, transition: { duration: 0.1 } }}
       />
@@ -596,12 +603,9 @@ function MachineNode({
 }) {
   // Node appearance encodes load and activity
   const fillColor: string = COLORS.surface
-  let strokeColor: string = COLORS.outline
-
   const pressure = queueLen / Math.max(1, maxWorkers)
-  if (pressure > 1.5) strokeColor = COLORS.dangerStroke
-  else if (pressure > 0.75) strokeColor = COLORS.warnStroke
-  else if (isActive) strokeColor = COLORS.textMuted
+  const loadRatio = Math.min(Math.max(pressure, 0), 1)
+  const strokeColor = lerpColor(COLORS.strokeBase, COLORS.strokeActive, loadRatio)
 
   return (
     <g transform={`translate(${x}, ${y})`}>
@@ -772,7 +776,7 @@ function PhotoStack({
         // Each paper shifts up and left as we go up the stack
         const x = baseX + i * PHOTO_STACK_OFFSET_X
         const y = baseY + i * PHOTO_STACK_OFFSET_Y
-        const stroke = completedCount > stackCount - 1 - i ? COLORS.muted : COLORS.outline
+        const stroke = completedCount > stackCount - 1 - i ? COLORS.strokeActive : COLORS.strokeBase
 
         return (
           <g
