@@ -1,4 +1,5 @@
 import { Box } from '@chakra-ui/react'
+import { useId } from 'react'
 import {
   PARTICLE_FLOW_DIMENSIONS,
   PARTICLE_FLOW_GEOMETRY,
@@ -57,7 +58,13 @@ function ParticleElement({ particle, height }: { particle: Particle; height: num
   )
 }
 
-const Lens = () => {
+const Lens = ({
+  fillId,
+  highlightId,
+}: {
+  fillId: string
+  highlightId: string
+}) => {
   const { width } = PARTICLE_FLOW_DIMENSIONS
   const { conduitStart, conduitEnd } = PARTICLE_FLOW_ZONES
   const { centerY, conduitHalfHeight } = PARTICLE_FLOW_GEOMETRY
@@ -70,37 +77,6 @@ const Lens = () => {
 
   return (
     <g>
-      <defs>
-        <linearGradient id="lens-fill" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%" stopColor={COLORS.lensFill} />
-          <stop offset="50%" stopColor="rgba(255, 255, 255, 0.06)" />
-          <stop offset="100%" stopColor={COLORS.lensFill} />
-        </linearGradient>
-        <linearGradient id="lens-highlight" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={COLORS.lensHighlight} />
-          <stop offset="100%" stopColor="rgba(255, 255, 255, 0)" />
-        </linearGradient>
-        <filter
-          id="lens-warp"
-          x={lensX - 12}
-          y={lensY - 12}
-          width={lensWidth + 24}
-          height={lensHeight + 24}
-          filterUnits="userSpaceOnUse"
-        >
-          <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="2" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        <mask id="lens-inside">
-          <rect x="0" y="0" width={width} height="100%" fill="black" />
-          <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="white" />
-        </mask>
-        <mask id="lens-outside">
-          <rect x="0" y="0" width={width} height="100%" fill="white" />
-          <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="black" />
-        </mask>
-      </defs>
-
       <rect
         x={lensX}
         y={lensY}
@@ -108,7 +84,7 @@ const Lens = () => {
         height={lensHeight}
         rx={radius}
         ry={radius}
-        fill="url(#lens-fill)"
+        fill={`url(#${fillId})`}
         stroke={COLORS.lensStroke}
         strokeWidth={1}
       />
@@ -119,7 +95,7 @@ const Lens = () => {
         height={lensHeight * 0.4}
         rx={radius}
         ry={radius}
-        fill="url(#lens-highlight)"
+        fill={`url(#${highlightId})`}
       />
     </g>
   )
@@ -127,6 +103,7 @@ const Lens = () => {
 
 export default function BackpressureVisual() {
   const particles = useParticleFlow()
+  const instanceId = useId().replace(/:/g, '')
   const { width, height } = PARTICLE_FLOW_DIMENSIONS
   const { conduitStart, conduitEnd } = PARTICLE_FLOW_ZONES
   const { centerY, conduitHalfHeight } = PARTICLE_FLOW_GEOMETRY
@@ -136,6 +113,12 @@ export default function BackpressureVisual() {
   const lensY = centerY - conduitHalfHeight - lensPadding
   const lensHeight = conduitHalfHeight * 2 + lensPadding * 2
   const radius = lensHeight / 2
+  const particleLayerId = `${instanceId}-particles`
+  const lensFillId = `${instanceId}-lens-fill`
+  const lensHighlightId = `${instanceId}-lens-highlight`
+  const lensWarpId = `${instanceId}-lens-warp`
+  const lensInsideId = `${instanceId}-lens-inside`
+  const lensOutsideId = `${instanceId}-lens-outside`
 
   return (
     <Box
@@ -157,17 +140,54 @@ export default function BackpressureVisual() {
         aria-label="Particle flow visualization showing backpressure behavior"
         role="img"
       >
-        <g mask="url(#lens-outside)">
-          {particles.map(particle => (
-            <ParticleElement key={`outer-${particle.id}`} particle={particle} height={height} />
-          ))}
+        <defs>
+          <linearGradient id={lensFillId} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor={COLORS.lensFill} />
+            <stop offset="50%" stopColor="rgba(255, 255, 255, 0.06)" />
+            <stop offset="100%" stopColor={COLORS.lensFill} />
+          </linearGradient>
+          <linearGradient id={lensHighlightId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={COLORS.lensHighlight} />
+            <stop offset="100%" stopColor="rgba(255, 255, 255, 0)" />
+          </linearGradient>
+          <filter
+            id={lensWarpId}
+            x={lensX - 12}
+            y={lensY - 12}
+            width={lensWidth + 24}
+            height={lensHeight + 24}
+            filterUnits="userSpaceOnUse"
+          >
+            <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="2" result="noise" />
+            <feDisplacementMap
+              in="SourceGraphic"
+              in2="noise"
+              scale="6"
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+          <mask id={lensInsideId}>
+            <rect x="0" y="0" width={width} height="100%" fill="black" />
+            <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="white" />
+          </mask>
+          <mask id={lensOutsideId}>
+            <rect x="0" y="0" width={width} height="100%" fill="white" />
+            <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="black" />
+          </mask>
+          <g id={particleLayerId}>
+            {particles.map(particle => (
+              <ParticleElement key={particle.id} particle={particle} height={height} />
+            ))}
+          </g>
+        </defs>
+        <g mask={`url(#${lensOutsideId})`}>
+          <use href={`#${particleLayerId}`} />
         </g>
-        <g mask="url(#lens-inside)" filter="url(#lens-warp)">
-          {particles.map(particle => (
-            <ParticleElement key={`inner-${particle.id}`} particle={particle} height={height} />
-          ))}
+        <g mask={`url(#${lensInsideId})`} filter={`url(#${lensWarpId})`}>
+          <use href={`#${particleLayerId}`} />
         </g>
-        <Lens />
+        <Lens fillId={lensFillId} highlightId={lensHighlightId} />
       </svg>
     </Box>
   )
