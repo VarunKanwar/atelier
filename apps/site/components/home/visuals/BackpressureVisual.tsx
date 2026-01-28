@@ -135,7 +135,7 @@ export default function BackpressureVisual() {
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        style={{ width: '100%', height: '100%', maxWidth: '500px' }}
+        style={{ width: '100%', height: '100%' }}
         preserveAspectRatio="xMidYMid meet"
         aria-label="Particle flow visualization showing backpressure behavior"
         role="img"
