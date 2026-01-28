@@ -5,8 +5,15 @@
   --font-sans: "Manrope", "IBM Plex Sans", "Segoe UI", "Helvetica Neue", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
   --page-bg: #f6f7fb;
+  --surface: #ffffff;
   --surface-muted: #f1f3f7;
   --border-subtle: #e1e6ef;
+  --stroke-subtle: #cbd5e1;
+  --stroke-muted: #9ca3af;
+  --text-muted: #64748b;
+  --lens-stroke: rgba(148, 163, 184, 0.35);
+  --lens-fill: rgba(148, 163, 184, 0.08);
+  --lens-highlight: rgba(255, 255, 255, 0.35);
   --accent: #2f6bff;
   --accent-strong: #1f4fd6;
   --content-max-width: 1280px;
