@@ -39,8 +39,7 @@ const COLORS = {
 
 // Layout anchors for the pipeline diagram in SVG coordinate space.
 const STROKE_WIDTH_BASE = 1.5
-const PACKET_THICKNESS = 0
-const PACKET_GLOW_THICKNESS = 1.5
+const PACKET_THICKNESS = 1.5
 const PACKET_LENGTH_PX = 28
 const WORKER_STEP_MS = 220
 const CURVE_BEND = 30
@@ -200,37 +199,6 @@ export default function DefineDispatchVisual() {
         role="img"
       >
         <defs>
-          <linearGradient
-            id="packet-rainbow"
-            gradientUnits="userSpaceOnUse"
-            x1="0"
-            y1="0"
-            x2="500"
-            y2="0"
-          >
-            {COLORS.rainbowStops.map((color, index) => (
-              <stop
-                // biome-ignore lint/suspicious/noArrayIndexKey: stable array for static gradient.
-                key={index}
-                offset={`${(index / (COLORS.rainbowStops.length - 1)) * 100}%`}
-                stopColor={color}
-              />
-            ))}
-          </linearGradient>
-          <filter
-            id="packet-glow"
-            filterUnits="userSpaceOnUse"
-            x="-20"
-            y="-20"
-            width="540"
-            height="340"
-          >
-            <feGaussianBlur stdDeviation="1" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
 
         {/* --- DAG EDGES (Static Pipes) --- */}
@@ -562,7 +530,7 @@ function Packet({
   const config = STAGE_VISUALS[item.stage]
   const pathKey = typeof config.pathKey === 'function' ? config.pathKey(item) : config.pathKey
   const path = PATHS[pathKey]
-  const accent = typeof config.accent === 'function' ? config.accent(item) : config.accent
+  const strokeColor = COLORS.muted
   const startOffset = config.startOffset ?? '0%'
   const finalOffset = config.queueOffset
     ? config.queueOffset(queueIndex)
@@ -584,36 +552,15 @@ function Packet({
       <motion.path
         d={path}
         pathLength={100}
-        stroke="url(#packet-rainbow)"
-        fill="none"
-        strokeWidth={PACKET_GLOW_THICKNESS}
-        strokeLinecap="round"
-        strokeDasharray={dashArray}
-        filter="url(#packet-glow)"
-        initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
-        animate={{
-          strokeDashoffset: endDash,
-          opacity: isProcess ? [0.9, 0.5, 0.9] : 0.9,
-        }}
-        transition={{
-          duration: duration,
-          ease: 'linear',
-          opacity: { repeat: isProcess ? Infinity : 0, duration: 0.5 },
-        }}
-        exit={{ opacity: 0, transition: { duration: 0.1 } }}
-      />
-      <motion.path
-        d={path}
-        pathLength={100}
-        stroke={accent}
+        stroke={strokeColor}
         fill="none"
         strokeWidth={PACKET_THICKNESS}
         strokeLinecap="round"
         strokeDasharray={dashArray}
-        initial={{ strokeDashoffset: startDash, opacity: 1 }}
+        initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
         animate={{
           strokeDashoffset: endDash,
-          opacity: isProcess ? [1, 0.6, 1] : 1,
+          opacity: isProcess ? [0.9, 0.5, 0.9] : 0.9,
         }}
         transition={{
           duration: duration,
