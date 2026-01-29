@@ -52,9 +52,8 @@ export interface UseCancellationAnimationReturn {
 // Constants
 // -----------------------------------------------------------------------------
 
-const TICK_MS = 30
 const VIEWBOX_WIDTH = 320
-const WAVE_DURATION_MS = 4000 // 2 seconds for wave to cross
+const WAVE_DURATION_MS = 2000 // time it takes for wave to cross the screen
 const MAX_QUEUE_SIZE = 4
 
 // Queue slot x positions (fixed)
@@ -323,9 +322,11 @@ function createInitialState(): TickState {
 
 export function useCancellationAnimation(): UseCancellationAnimationReturn {
   const [state, setState] = useState<TickState>(createInitialState)
+  const stateRef = useRef(state)
   const waveX = useMotionValue(-10)
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rafRef = useRef<number | null>(null)
   const isPausedRef = useRef(false)
   const animationRef = useRef<ReturnType<typeof animate> | null>(null)
 
@@ -342,28 +343,73 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
     })
   }, [waveX])
 
-  const startInterval = useCallback(() => {
-    if (intervalRef.current) return
-    intervalRef.current = setInterval(() => {
-      if (!isPausedRef.current) {
-        setState(prev =>
-          tick({
-            state: prev,
-            now: Date.now(),
-            waveX: waveX.get(),
-            onStartWave: startWave,
-          })
-        )
-      }
-    }, TICK_MS)
-  }, [waveX, startWave])
-
-  const stopInterval = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
+  const clearTimeoutRef = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
     }
   }, [])
+
+  const clearRaf = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [])
+
+  const step = useCallback(
+    (now: number) => {
+      const next = tick({
+        state: stateRef.current,
+        now,
+        waveX: waveX.get(),
+        onStartWave: startWave,
+      })
+      if (next !== stateRef.current) {
+        stateRef.current = next
+        setState(next)
+      }
+      return next
+    },
+    [startWave, waveX]
+  )
+
+  const scheduleNext = useCallback(
+    (now: number, nextState: TickState) => {
+      if (isPausedRef.current) return
+      clearTimeoutRef()
+      if (nextState.waveActive) {
+        if (rafRef.current === null) {
+          const loop = () => {
+            if (isPausedRef.current) return
+            const frameNow = Date.now()
+            const latest = step(frameNow)
+            if (latest.waveActive) {
+              rafRef.current = requestAnimationFrame(loop)
+            } else {
+              rafRef.current = null
+              scheduleNext(frameNow, latest)
+            }
+          }
+          rafRef.current = requestAnimationFrame(loop)
+        }
+        return
+      }
+
+      const candidates = [nextState.workerBusyUntil, nextState.nextSpawnAt, nextState.nextWaveAt]
+      const future = candidates.filter(time => time > now)
+      if (future.length === 0) return
+      const nextAt = Math.min(...future)
+      const delay = Math.max(16, nextAt - now)
+      timeoutRef.current = setTimeout(() => {
+        if (isPausedRef.current) return
+        const tickNow = Date.now()
+        const latest = step(tickNow)
+        scheduleNext(tickNow, latest)
+      }, delay)
+    },
+    [clearTimeoutRef, step]
+  )
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -373,35 +419,43 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
         if (animationRef.current) {
           animationRef.current.stop()
         }
+        clearTimeoutRef()
+        clearRaf()
       } else {
         isPausedRef.current = false
         // Adjust timestamps on resume
-        setState(prev => {
-          const now = Date.now()
-          return {
-            ...prev,
-            waveActive: false, // Reset wave state on resume
-            showLabel: false,
-            workerBusyUntil: Math.max(prev.workerBusyUntil, now + 500),
-            nextSpawnAt: Math.max(prev.nextSpawnAt, now + 300),
-            nextWaveAt: Math.max(prev.nextWaveAt, now + 2000),
-          }
-        })
+        const now = Date.now()
+        const nextState = {
+          ...stateRef.current,
+          waveActive: false, // Reset wave state on resume
+          showLabel: false,
+          workerBusyUntil: Math.max(stateRef.current.workerBusyUntil, now + 500),
+          nextSpawnAt: Math.max(stateRef.current.nextSpawnAt, now + 300),
+          nextWaveAt: Math.max(stateRef.current.nextWaveAt, now + 2000),
+        }
+        stateRef.current = nextState
+        setState(nextState)
         waveX.set(-10)
+        scheduleNext(now, nextState)
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibility)
-    startInterval()
+    scheduleNext(Date.now(), stateRef.current)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
-      stopInterval()
+      clearTimeoutRef()
+      clearRaf()
       if (animationRef.current) {
         animationRef.current.stop()
       }
     }
-  }, [startInterval, stopInterval, waveX])
+  }, [clearRaf, clearTimeoutRef, scheduleNext, waveX])
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   return {
     queue: state.queue,
