@@ -273,7 +273,6 @@ export default function CancellationVisual() {
         <AnimatePresence>
           {inFlight && <InFlightElement key={inFlight.id} item={inFlight} />}
         </AnimatePresence>
-
       </svg>
     </Box>
   )

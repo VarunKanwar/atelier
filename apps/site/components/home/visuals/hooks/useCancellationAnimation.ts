@@ -30,8 +30,6 @@ export interface InFlightItem {
 interface TickState {
   queue: QueuedItem[] // ordered array, index = slot position
   inFlight: InFlightItem | null
-  exitingIds: Set<string> // items currently fading out
-  exitingClearAt: number | null
   workerBusyUntil: number
   commandPhase: CommandPhase
   commandIndex: number
@@ -42,7 +40,6 @@ interface TickState {
 export interface UseCancellationAnimationReturn {
   queue: QueuedItem[]
   inFlight: InFlightItem | null
-  exitingIds: Set<string>
   commandText: string
   commandPhase: CommandPhase
 }
@@ -55,8 +52,7 @@ export type CommandPhase = 'idle' | 'typing' | 'executing'
 
 const COMMAND_TEXT = 'cancel(edges > 3)'
 const TYPE_INTERVAL_MS = 60
-const EXECUTE_PAUSE_MS = 280
-const EXIT_DURATION_MS = 220
+const EXECUTE_PAUSE_MS = 1000
 const MAX_QUEUE_SIZE = 4
 
 // Queue slot x positions (fixed)
@@ -71,8 +67,8 @@ const PROCESS_TIME: [number, number] = [1500, 2500]
 
 // Shape spawn weights
 const SPAWN_WEIGHTS: Record<Shape, number> = {
-  circle: 2,
-  triangle: 2,
+  circle: 1,
+  triangle: 1,
   square: 1,
   diamond: 1,
   pentagon: 1,
@@ -136,8 +132,6 @@ function tick({ state, now }: TickParams): TickState {
   let {
     queue,
     inFlight,
-    exitingIds,
-    exitingClearAt,
     workerBusyUntil,
     commandPhase,
     commandIndex,
@@ -146,7 +140,6 @@ function tick({ state, now }: TickParams): TickState {
   } = state
   let didChange = false
   let queueCloned = false
-  let exitingCloned = false
 
   const ensureQueue = () => {
     if (!queueCloned) {
@@ -154,33 +147,6 @@ function tick({ state, now }: TickParams): TickState {
       queueCloned = true
       didChange = true
     }
-  }
-
-  const ensureExiting = () => {
-    if (!exitingCloned) {
-      exitingIds = new Set(exitingIds)
-      exitingCloned = true
-      didChange = true
-    }
-  }
-
-  const markExiting = (id: string) => {
-    if (exitingIds.has(id)) return
-    ensureExiting()
-    exitingIds.add(id)
-    if (!exitingClearAt || exitingClearAt < now + EXIT_DURATION_MS) {
-      exitingClearAt = now + EXIT_DURATION_MS
-    }
-    didChange = true
-  }
-
-  if (exitingClearAt && now >= exitingClearAt) {
-    if (exitingIds.size > 0) {
-      ensureExiting()
-      exitingIds.clear()
-    }
-    exitingClearAt = null
-    didChange = true
   }
 
   if (commandPhase === 'idle' && now >= nextCommandAt) {
@@ -199,35 +165,33 @@ function tick({ state, now }: TickParams): TickState {
       commandPhase = 'executing'
       commandNextAt = now + EXECUTE_PAUSE_MS
       didChange = true
-
-      let survivingQueue: QueuedItem[] | null = null
-      for (let i = 0; i < queue.length; i++) {
-        const item = queue[i]
-        if (item.edges > 3) {
-          markExiting(item.id)
-          if (!survivingQueue) {
-            survivingQueue = queue.slice(0, i)
-          }
-          continue
-        }
-        if (survivingQueue) {
-          survivingQueue.push(item)
-        }
-      }
-      if (survivingQueue) {
-        queue = survivingQueue
-        didChange = true
-      }
-
-      if (inFlight && inFlight.edges > 3) {
-        markExiting(inFlight.id)
-        inFlight = null
-        didChange = true
-      }
     }
   }
 
   if (commandPhase === 'executing' && now >= commandNextAt) {
+    let survivingQueue: QueuedItem[] | null = null
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i]
+      if (item.edges > 3) {
+        if (!survivingQueue) {
+          survivingQueue = queue.slice(0, i)
+        }
+        continue
+      }
+      if (survivingQueue) {
+        survivingQueue.push(item)
+      }
+    }
+    if (survivingQueue) {
+      queue = survivingQueue
+      didChange = true
+    }
+
+    if (inFlight && inFlight.edges > 3) {
+      inFlight = null
+      didChange = true
+    }
+
     commandPhase = 'idle'
     commandIndex = 0
     nextCommandAt = now + randomRange(...COMMAND_INTERVAL)
@@ -235,7 +199,6 @@ function tick({ state, now }: TickParams): TickState {
   }
 
   if (inFlight && now >= workerBusyUntil) {
-    markExiting(inFlight.id)
     inFlight = null
     didChange = true
   }
@@ -273,8 +236,6 @@ function tick({ state, now }: TickParams): TickState {
   return {
     queue,
     inFlight,
-    exitingIds,
-    exitingClearAt,
     workerBusyUntil,
     commandPhase,
     commandIndex,
@@ -307,8 +268,6 @@ function createInitialState(): TickState {
   return {
     queue,
     inFlight,
-    exitingIds: new Set(),
-    exitingClearAt: null,
     workerBusyUntil: now + randomRange(...PROCESS_TIME),
     commandPhase: 'idle',
     commandIndex: 0,
@@ -352,9 +311,6 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
       const times: number[] = []
       if (nextState.inFlight) {
         times.push(nextState.workerBusyUntil)
-      }
-      if (nextState.exitingClearAt) {
-        times.push(nextState.exitingClearAt)
       }
       if (nextState.commandPhase === 'typing' || nextState.commandPhase === 'executing') {
         times.push(nextState.commandNextAt)
@@ -412,7 +368,6 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
   return {
     queue: state.queue,
     inFlight: state.inFlight,
-    exitingIds: state.exitingIds,
     commandText,
     commandPhase: state.commandPhase,
   }
