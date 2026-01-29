@@ -21,6 +21,8 @@ export interface QueuedItem {
   edges: number
 }
 
+export type QueueSlot = QueuedItem | null
+
 export interface InFlightItem {
   id: string
   shape: Shape
@@ -28,8 +30,11 @@ export interface InFlightItem {
 }
 
 interface TickState {
-  queue: QueuedItem[] // ordered array, index = slot position
+  queue: QueueSlot[] // ordered array, index = slot position
   inFlight: InFlightItem | null
+  cancelingIds: Set<string>
+  cancelingUntil: number | null
+  postCancelPauseUntil: number | null
   workerBusyUntil: number
   commandPhase: CommandPhase
   commandIndex: number
@@ -38,8 +43,9 @@ interface TickState {
 }
 
 export interface UseCancellationAnimationReturn {
-  queue: QueuedItem[]
+  queue: QueueSlot[]
   inFlight: InFlightItem | null
+  cancelingIds: Set<string>
   commandText: string
   commandPhase: CommandPhase
 }
@@ -53,6 +59,8 @@ export type CommandPhase = 'idle' | 'typing' | 'executing'
 const COMMAND_TEXT = 'cancel(edges > 3)'
 const TYPE_INTERVAL_MS = 60
 const EXECUTE_PAUSE_MS = 1000
+export const CANCEL_ANIMATION_MS = 700
+const POST_CANCEL_PAUSE_MS = 500
 const MAX_QUEUE_SIZE = 4
 
 // Queue slot x positions (fixed)
@@ -62,7 +70,7 @@ export const QUEUE_SLOTS = [128, 96, 64, 32] // front → back
 export const WORKER_X = 224
 
 // Timing ranges (ms)
-const COMMAND_INTERVAL: [number, number] = [4000, 6000]
+const COMMAND_INTERVAL: [number, number] = [2000, 6000]
 const PROCESS_TIME: [number, number] = [1500, 2500]
 
 // Shape spawn weights
@@ -132,6 +140,9 @@ function tick({ state, now }: TickParams): TickState {
   let {
     queue,
     inFlight,
+    cancelingIds,
+    cancelingUntil,
+    postCancelPauseUntil,
     workerBusyUntil,
     commandPhase,
     commandIndex,
@@ -140,6 +151,7 @@ function tick({ state, now }: TickParams): TickState {
   } = state
   let didChange = false
   let queueCloned = false
+  let cancelingCloned = false
 
   const ensureQueue = () => {
     if (!queueCloned) {
@@ -149,7 +161,25 @@ function tick({ state, now }: TickParams): TickState {
     }
   }
 
-  if (commandPhase === 'idle' && now >= nextCommandAt) {
+  const isCanceling = () => cancelingUntil !== null && now < cancelingUntil
+  const isPostCancelPaused = () =>
+    postCancelPauseUntil !== null && now < postCancelPauseUntil
+  const isQueuePaused = () => isCanceling() || isPostCancelPaused()
+
+  const ensureCanceling = () => {
+    if (!cancelingCloned) {
+      cancelingIds = new Set(cancelingIds)
+      cancelingCloned = true
+      didChange = true
+    }
+  }
+
+  if (postCancelPauseUntil && now >= postCancelPauseUntil) {
+    postCancelPauseUntil = null
+    didChange = true
+  }
+
+  if (commandPhase === 'idle' && now >= nextCommandAt && !isQueuePaused()) {
     commandPhase = 'typing'
     commandIndex = 0
     commandNextAt = now + TYPE_INTERVAL_MS
@@ -169,63 +199,100 @@ function tick({ state, now }: TickParams): TickState {
   }
 
   if (commandPhase === 'executing' && now >= commandNextAt) {
-    let survivingQueue: QueuedItem[] | null = null
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i]
-      if (item.edges > 3) {
-        if (!survivingQueue) {
-          survivingQueue = queue.slice(0, i)
+    if (!cancelingUntil) {
+      const nextCanceling = new Set<string>()
+      for (const slot of queue) {
+        if (slot && slot.edges > 3) {
+          nextCanceling.add(slot.id)
         }
-        continue
       }
-      if (survivingQueue) {
-        survivingQueue.push(item)
+      if (inFlight && inFlight.edges > 3) {
+        nextCanceling.add(inFlight.id)
       }
-    }
-    if (survivingQueue) {
-      queue = survivingQueue
+
+      if (nextCanceling.size > 0) {
+        ensureCanceling()
+        cancelingIds = nextCanceling
+        cancelingUntil = now + CANCEL_ANIMATION_MS
+        commandNextAt = cancelingUntil
+        didChange = true
+      } else {
+        commandPhase = 'idle'
+        commandIndex = 0
+        nextCommandAt = now + randomRange(...COMMAND_INTERVAL)
+        didChange = true
+      }
+    } else {
+      if (cancelingIds.size > 0) {
+        ensureQueue()
+        for (let i = 0; i < queue.length; i++) {
+          const slot = queue[i]
+          if (slot && cancelingIds.has(slot.id)) {
+            queue[i] = null
+            didChange = true
+          }
+        }
+        if (inFlight && cancelingIds.has(inFlight.id)) {
+          inFlight = null
+          didChange = true
+        }
+        ensureCanceling()
+        cancelingIds.clear()
+      }
+      cancelingUntil = null
+      postCancelPauseUntil = now + POST_CANCEL_PAUSE_MS
+      commandPhase = 'idle'
+      commandIndex = 0
+      nextCommandAt = now + randomRange(...COMMAND_INTERVAL)
       didChange = true
     }
-
-    if (inFlight && inFlight.edges > 3) {
-      inFlight = null
-      didChange = true
-    }
-
-    commandPhase = 'idle'
-    commandIndex = 0
-    nextCommandAt = now + randomRange(...COMMAND_INTERVAL)
-    didChange = true
   }
 
-  if (inFlight && now >= workerBusyUntil) {
+  if (!isQueuePaused() && inFlight && now >= workerBusyUntil) {
     inFlight = null
     didChange = true
   }
 
-  if (queue.length < MAX_QUEUE_SIZE) {
-    ensureQueue()
-    while (queue.length < MAX_QUEUE_SIZE) {
-      queue.push(createItem())
+  if (!isQueuePaused()) {
+    const hasHoles = queue.some(slot => slot === null) && queue.some(slot => slot !== null)
+    if (hasHoles) {
+      ensureQueue()
+      const compacted: QueueSlot[] = Array(MAX_QUEUE_SIZE).fill(null)
+      let nextIndex = 0
+      for (const slot of queue) {
+        if (!slot) continue
+        compacted[nextIndex] = slot
+        nextIndex += 1
+      }
+      queue = compacted
       didChange = true
     }
-  }
 
-  if (!inFlight && queue.length > 0) {
-    ensureQueue()
-    const promoted = queue.shift()
-    if (promoted) {
-      inFlight = { ...promoted }
-      workerBusyUntil = now + randomRange(...PROCESS_TIME)
-      didChange = true
+    if (!inFlight) {
+      const promoteIndex = queue.findIndex(slot => slot !== null)
+      if (promoteIndex >= 0) {
+        const promoted = queue[promoteIndex]
+        if (promoted) {
+          ensureQueue()
+          queue[promoteIndex] = null
+          inFlight = { ...promoted }
+          workerBusyUntil = now + randomRange(...PROCESS_TIME)
+          didChange = true
+        }
+      }
     }
-  }
 
-  if (queue.length < MAX_QUEUE_SIZE) {
-    ensureQueue()
-    while (queue.length < MAX_QUEUE_SIZE) {
-      queue.push(createItem())
-      didChange = true
+    let filled = false
+    for (let i = MAX_QUEUE_SIZE - 1; i >= 0; i--) {
+      if (queue[i] === null) {
+        ensureQueue()
+        queue[i] = createItem()
+        filled = true
+        didChange = true
+      }
+    }
+    if (filled) {
+      // Preserve queue reference updates.
     }
   }
 
@@ -236,6 +303,9 @@ function tick({ state, now }: TickParams): TickState {
   return {
     queue,
     inFlight,
+    cancelingIds,
+    cancelingUntil,
+    postCancelPauseUntil,
     workerBusyUntil,
     commandPhase,
     commandIndex,
@@ -268,6 +338,9 @@ function createInitialState(): TickState {
   return {
     queue,
     inFlight,
+    cancelingIds: new Set(),
+    cancelingUntil: null,
+    postCancelPauseUntil: null,
     workerBusyUntil: now + randomRange(...PROCESS_TIME),
     commandPhase: 'idle',
     commandIndex: 0,
@@ -311,6 +384,9 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
       const times: number[] = []
       if (nextState.inFlight) {
         times.push(nextState.workerBusyUntil)
+      }
+      if (nextState.postCancelPauseUntil) {
+        times.push(nextState.postCancelPauseUntil)
       }
       if (nextState.commandPhase === 'typing' || nextState.commandPhase === 'executing') {
         times.push(nextState.commandNextAt)
@@ -368,6 +444,7 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
   return {
     queue: state.queue,
     inFlight: state.inFlight,
+    cancelingIds: state.cancelingIds,
     commandText,
     commandPhase: state.commandPhase,
   }

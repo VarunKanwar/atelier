@@ -2,6 +2,7 @@ import { Box } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import {
+  CANCEL_ANIMATION_MS,
   type InFlightItem,
   QUEUE_SLOTS,
   type QueuedItem,
@@ -20,12 +21,22 @@ const VIEWBOX = { width: 320, height: 80 }
 const SHAPE_SIZE = 6
 const WORKER_BOX = { x: 184, y: 24, width: 80, height: 32 }
 const CENTER_Y = 40
+const CANCEL_ANIMATION_S = CANCEL_ANIMATION_MS / 1000
 
 const COLORS = {
   stroke: 'var(--stroke-subtle)',
   strokeMuted: 'var(--stroke-muted)',
   textMuted: 'var(--text-muted)',
+  strokeCancel: '#f97316',
 } as const
+
+const FRAGMENT_SIZE = SHAPE_SIZE * 0.7
+const FRAGMENTS = [
+  { dx: -10, dy: -6, rotate: -35, delay: 0 },
+  { dx: 8, dy: -8, rotate: 28, delay: 0.04 },
+  { dx: -6, dy: 9, rotate: -18, delay: 0.06 },
+  { dx: 10, dy: 6, rotate: 22, delay: 0.08 },
+] as const
 
 // -----------------------------------------------------------------------------
 // Shape Rendering
@@ -39,8 +50,7 @@ function polygonPoints(radius: number, sides: number): string {
   }).join(' ')
 }
 
-function ShapeRenderer({ shape }: { shape: Shape }) {
-  const stroke = COLORS.stroke
+function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke?: string }) {
   const strokeWidth = 1
 
   switch (shape) {
@@ -108,6 +118,43 @@ function ShapeRenderer({ shape }: { shape: Shape }) {
   }
 }
 
+function FragmentScatter({ stroke }: { stroke: string }) {
+  return (
+    <g>
+      {FRAGMENTS.map((fragment, index) => (
+        <motion.g
+          key={index}
+          initial={{ x: 0, y: 0, opacity: 0.9, scale: 1, rotate: 0 }}
+          animate={{
+            x: fragment.dx,
+            y: fragment.dy,
+            opacity: 0,
+            scale: 0.25,
+            rotate: fragment.rotate,
+          }}
+          transition={{
+            duration: CANCEL_ANIMATION_S,
+            ease: 'easeOut',
+            delay: fragment.delay,
+          }}
+        >
+          <rect
+            x={-FRAGMENT_SIZE / 2}
+            y={-FRAGMENT_SIZE / 2}
+            width={FRAGMENT_SIZE}
+            height={FRAGMENT_SIZE}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={1}
+            rx={1}
+            ry={1}
+          />
+        </motion.g>
+      ))}
+    </g>
+  )
+}
+
 // -----------------------------------------------------------------------------
 // Queue Item - position derived from array index, animated with Framer Motion
 // -----------------------------------------------------------------------------
@@ -115,19 +162,27 @@ function ShapeRenderer({ shape }: { shape: Shape }) {
 interface QueueItemProps {
   item: QueuedItem
   slotIndex: number
+  isCanceling: boolean
 }
 
-function QueueItemElement({ item, slotIndex }: QueueItemProps) {
+function QueueItemElement({ item, slotIndex, isCanceling }: QueueItemProps) {
   const x = QUEUE_SLOTS[slotIndex]
+  const exit = isCanceling
+    ? { opacity: 0, scale: 0.15, rotate: -18 }
+    : { opacity: 0, scale: 0.5 }
 
   return (
     <motion.g
       initial={{ opacity: 0, x: x - 20 }}
       animate={{ opacity: 1, x, y: CENTER_Y }}
-      exit={{ opacity: 0, scale: 0.5 }}
+      exit={exit}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <ShapeRenderer shape={item.shape} />
+      {isCanceling ? (
+        <FragmentScatter stroke={COLORS.strokeCancel} />
+      ) : (
+        <ShapeRenderer shape={item.shape} />
+      )}
     </motion.g>
   )
 }
@@ -138,17 +193,26 @@ function QueueItemElement({ item, slotIndex }: QueueItemProps) {
 
 interface InFlightProps {
   item: InFlightItem
+  isCanceling: boolean
 }
 
-function InFlightElement({ item }: InFlightProps) {
+function InFlightElement({ item, isCanceling }: InFlightProps) {
+  const exit = isCanceling
+    ? { opacity: 0, scale: 0.15, rotate: 18 }
+    : { opacity: 0, x: WORKER_X + 30 }
+
   return (
     <motion.g
       initial={{ opacity: 0, x: QUEUE_SLOTS[0] }}
       animate={{ opacity: 1, x: WORKER_X, y: CENTER_Y }}
-      exit={{ opacity: 0, x: WORKER_X + 30 }}
+      exit={exit}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <ShapeRenderer shape={item.shape} />
+      {isCanceling ? (
+        <FragmentScatter stroke={COLORS.strokeCancel} />
+      ) : (
+        <ShapeRenderer shape={item.shape} />
+      )}
     </motion.g>
   )
 }
@@ -232,6 +296,7 @@ export default function CancellationVisual() {
   // Use static data for reduced motion
   const queue = prefersReducedMotion ? STATIC_QUEUE : animatedState.queue
   const inFlight = prefersReducedMotion ? STATIC_IN_FLIGHT : animatedState.inFlight
+  const cancelingIds = prefersReducedMotion ? new Set<string>() : animatedState.cancelingIds
   const commandText = prefersReducedMotion ? '' : animatedState.commandText
   const commandPhase = prefersReducedMotion ? 'idle' : animatedState.commandPhase
 
@@ -264,14 +329,28 @@ export default function CancellationVisual() {
 
         {/* Queue items with AnimatePresence for enter/exit */}
         <AnimatePresence>
-          {queue.map((item, index) => (
-            <QueueItemElement key={item.id} item={item} slotIndex={index} />
-          ))}
+          {queue.map((item, index) => {
+            if (!item) return null
+            return (
+              <QueueItemElement
+                key={item.id}
+                item={item}
+                slotIndex={index}
+                isCanceling={cancelingIds.has(item.id)}
+              />
+            )
+          })}
         </AnimatePresence>
 
         {/* In-flight item with AnimatePresence */}
         <AnimatePresence>
-          {inFlight && <InFlightElement key={inFlight.id} item={inFlight} />}
+          {inFlight && (
+            <InFlightElement
+              key={inFlight.id}
+              item={inFlight}
+              isCanceling={cancelingIds.has(inFlight.id)}
+            />
+          )}
         </AnimatePresence>
       </svg>
     </Box>
