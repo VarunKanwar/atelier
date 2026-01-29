@@ -1,4 +1,3 @@
-import { animate, type MotionValue, useMotionValue } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 // -----------------------------------------------------------------------------
@@ -32,28 +31,32 @@ interface TickState {
   queue: QueuedItem[] // ordered array, index = slot position
   inFlight: InFlightItem | null
   exitingIds: Set<string> // items currently fading out
-  waveActive: boolean
-  showLabel: boolean
+  exitingClearAt: number | null
   workerBusyUntil: number
-  nextSpawnAt: number
-  nextWaveAt: number
+  commandPhase: CommandPhase
+  commandIndex: number
+  commandNextAt: number
+  nextCommandAt: number
 }
 
 export interface UseCancellationAnimationReturn {
   queue: QueuedItem[]
   inFlight: InFlightItem | null
   exitingIds: Set<string>
-  waveX: MotionValue<number>
-  waveActive: boolean
-  showLabel: boolean
+  commandText: string
+  commandPhase: CommandPhase
 }
+
+export type CommandPhase = 'idle' | 'typing' | 'executing'
 
 // -----------------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------------
 
-const VIEWBOX_WIDTH = 320
-const WAVE_DURATION_MS = 2000 // time it takes for wave to cross the screen
+const COMMAND_TEXT = 'cancel(edges > 3)'
+const TYPE_INTERVAL_MS = 60
+const EXECUTE_PAUSE_MS = 280
+const EXIT_DURATION_MS = 220
 const MAX_QUEUE_SIZE = 4
 
 // Queue slot x positions (fixed)
@@ -63,8 +66,7 @@ export const QUEUE_SLOTS = [128, 96, 64, 32] // front → back
 export const WORKER_X = 224
 
 // Timing ranges (ms)
-const SPAWN_INTERVAL: [number, number] = [800, 1400]
-const WAVE_INTERVAL: [number, number] = [4000, 6000]
+const COMMAND_INTERVAL: [number, number] = [4000, 6000]
 const PROCESS_TIME: [number, number] = [1500, 2500]
 
 // Shape spawn weights
@@ -122,26 +124,25 @@ function createItem(): QueuedItem {
 }
 
 // -----------------------------------------------------------------------------
-// Tick function (waveX is read from motion value, not managed here)
+// Tick function
 // -----------------------------------------------------------------------------
 
 interface TickParams {
   state: TickState
   now: number
-  waveX: number // current value from motion value
-  onStartWave: () => void // callback to start wave animation
 }
 
-function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
+function tick({ state, now }: TickParams): TickState {
   let {
     queue,
     inFlight,
     exitingIds,
-    waveActive,
-    showLabel,
+    exitingClearAt,
     workerBusyUntil,
-    nextSpawnAt,
-    nextWaveAt,
+    commandPhase,
+    commandIndex,
+    commandNextAt,
+    nextCommandAt,
   } = state
   let didChange = false
   let queueCloned = false
@@ -163,76 +164,91 @@ function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
     }
   }
 
-  // Clear old exiting items (they've had time to animate out)
-  if (exitingIds.size > 0 && !waveActive) {
+  const markExiting = (id: string) => {
+    if (exitingIds.has(id)) return
     ensureExiting()
-    exitingIds.clear()
+    exitingIds.add(id)
+    if (!exitingClearAt || exitingClearAt < now + EXIT_DURATION_MS) {
+      exitingClearAt = now + EXIT_DURATION_MS
+    }
+    didChange = true
   }
 
-  // Wave logic - check cancellations based on current waveX
-  if (waveActive) {
-    // Check queue items against wave position (left to right)
-    let survivingQueue: QueuedItem[] | null = null
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i]
-      const slotX = QUEUE_SLOTS[i]
+  if (exitingClearAt && now >= exitingClearAt) {
+    if (exitingIds.size > 0) {
+      ensureExiting()
+      exitingIds.clear()
+    }
+    exitingClearAt = null
+    didChange = true
+  }
 
-      const alreadyExiting = exitingIds.has(item.id)
-      const shouldCancel = waveX >= slotX && item.edges > 3 && !alreadyExiting
+  if (commandPhase === 'idle' && now >= nextCommandAt) {
+    commandPhase = 'typing'
+    commandIndex = 0
+    commandNextAt = now + TYPE_INTERVAL_MS
+    didChange = true
+  }
 
-      if (alreadyExiting || shouldCancel) {
-        // Cancel this item
-        if (shouldCancel) {
-          ensureExiting()
-          exitingIds.add(item.id)
+  if (commandPhase === 'typing' && now >= commandNextAt) {
+    commandIndex = Math.min(COMMAND_TEXT.length, commandIndex + 1)
+    commandNextAt = now + TYPE_INTERVAL_MS
+    didChange = true
+
+    if (commandIndex >= COMMAND_TEXT.length) {
+      commandPhase = 'executing'
+      commandNextAt = now + EXECUTE_PAUSE_MS
+      didChange = true
+
+      let survivingQueue: QueuedItem[] | null = null
+      for (let i = 0; i < queue.length; i++) {
+        const item = queue[i]
+        if (item.edges > 3) {
+          markExiting(item.id)
+          if (!survivingQueue) {
+            survivingQueue = queue.slice(0, i)
+          }
+          continue
         }
-        if (!survivingQueue) {
-          survivingQueue = queue.slice(0, i)
+        if (survivingQueue) {
+          survivingQueue.push(item)
         }
-        continue
       }
       if (survivingQueue) {
-        survivingQueue.push(item)
-      }
-    }
-    if (survivingQueue) {
-      queue = survivingQueue
-      didChange = true
-    }
-
-    // Check in-flight item
-    if (inFlight && waveX >= WORKER_X && inFlight.edges > 3 && !exitingIds.has(inFlight.id)) {
-      ensureExiting()
-      exitingIds.add(inFlight.id)
-      inFlight = null
-      didChange = true
-      // Immediately promote front of queue if available
-      if (queue.length > 0) {
-        ensureQueue()
-      }
-      const promoted = queue.shift()
-      if (promoted) {
-        inFlight = { ...promoted }
-        workerBusyUntil = now + randomRange(...PROCESS_TIME)
+        queue = survivingQueue
         didChange = true
       }
-    }
 
-    // Wave complete
-    if (waveX >= VIEWBOX_WIDTH) {
-      if (waveActive) {
-        waveActive = false
-        didChange = true
-      }
-      if (showLabel) {
-        showLabel = false
+      if (inFlight && inFlight.edges > 3) {
+        markExiting(inFlight.id)
+        inFlight = null
         didChange = true
       }
     }
   }
 
-  // Promotion: if worker empty and not during wave, promote front item
-  if (!inFlight && !waveActive && queue.length > 0 && now >= workerBusyUntil) {
+  if (commandPhase === 'executing' && now >= commandNextAt) {
+    commandPhase = 'idle'
+    commandIndex = 0
+    nextCommandAt = now + randomRange(...COMMAND_INTERVAL)
+    didChange = true
+  }
+
+  if (inFlight && now >= workerBusyUntil) {
+    markExiting(inFlight.id)
+    inFlight = null
+    didChange = true
+  }
+
+  if (queue.length < MAX_QUEUE_SIZE) {
+    ensureQueue()
+    while (queue.length < MAX_QUEUE_SIZE) {
+      queue.push(createItem())
+      didChange = true
+    }
+  }
+
+  if (!inFlight && queue.length > 0) {
     ensureQueue()
     const promoted = queue.shift()
     if (promoted) {
@@ -242,29 +258,12 @@ function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
     }
   }
 
-  // Worker completion: item exits, becomes available for next
-  if (inFlight && now >= workerBusyUntil && !waveActive) {
-    ensureExiting()
-    exitingIds.add(inFlight.id)
-    inFlight = null
-    didChange = true
-  }
-
-  // Spawning: add items to back of queue
-  if (queue.length < MAX_QUEUE_SIZE && now >= nextSpawnAt && !waveActive) {
+  if (queue.length < MAX_QUEUE_SIZE) {
     ensureQueue()
-    queue.push(createItem())
-    nextSpawnAt = now + randomRange(...SPAWN_INTERVAL)
-    didChange = true
-  }
-
-  // Trigger wave
-  if (!waveActive && now >= nextWaveAt) {
-    waveActive = true
-    showLabel = true
-    onStartWave() // Start the Framer Motion animation
-    nextWaveAt = now + randomRange(...WAVE_INTERVAL)
-    didChange = true
+    while (queue.length < MAX_QUEUE_SIZE) {
+      queue.push(createItem())
+      didChange = true
+    }
   }
 
   if (!didChange) {
@@ -275,11 +274,12 @@ function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
     queue,
     inFlight,
     exitingIds,
-    waveActive,
-    showLabel,
+    exitingClearAt,
     workerBusyUntil,
-    nextSpawnAt,
-    nextWaveAt,
+    commandPhase,
+    commandIndex,
+    commandNextAt,
+    nextCommandAt,
   }
 }
 
@@ -298,9 +298,9 @@ function createInitialState(): TickState {
     edges: SHAPE_EDGES[inFlightShape],
   }
 
-  // And 3 items in queue
+  // And items in queue (full capacity)
   const queue: QueuedItem[] = []
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < MAX_QUEUE_SIZE; i++) {
     queue.push(createItem())
   }
 
@@ -308,11 +308,12 @@ function createInitialState(): TickState {
     queue,
     inFlight,
     exitingIds: new Set(),
-    waveActive: false,
-    showLabel: false,
+    exitingClearAt: null,
     workerBusyUntil: now + randomRange(...PROCESS_TIME),
-    nextSpawnAt: now + randomRange(...SPAWN_INTERVAL),
-    nextWaveAt: now + 2500, // first wave after 2.5s
+    commandPhase: 'idle',
+    commandIndex: 0,
+    commandNextAt: now + TYPE_INTERVAL_MS,
+    nextCommandAt: now + 2000,
   }
 }
 
@@ -323,25 +324,9 @@ function createInitialState(): TickState {
 export function useCancellationAnimation(): UseCancellationAnimationReturn {
   const [state, setState] = useState<TickState>(createInitialState)
   const stateRef = useRef(state)
-  const waveX = useMotionValue(-10)
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rafRef = useRef<number | null>(null)
   const isPausedRef = useRef(false)
-  const animationRef = useRef<ReturnType<typeof animate> | null>(null)
-
-  const startWave = useCallback(() => {
-    // Cancel any existing animation
-    if (animationRef.current) {
-      animationRef.current.stop()
-    }
-    // Start smooth animation from 0 to past viewbox
-    waveX.set(0)
-    animationRef.current = animate(waveX, VIEWBOX_WIDTH + 20, {
-      duration: WAVE_DURATION_MS / 1000,
-      ease: 'linear',
-    })
-  }, [waveX])
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current) {
@@ -350,54 +335,34 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
     }
   }, [])
 
-  const clearRaf = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
+  const step = useCallback((now: number) => {
+    const next = tick({ state: stateRef.current, now })
+    if (next !== stateRef.current) {
+      stateRef.current = next
+      setState(next)
     }
+    return next
   }, [])
-
-  const step = useCallback(
-    (now: number) => {
-      const next = tick({
-        state: stateRef.current,
-        now,
-        waveX: waveX.get(),
-        onStartWave: startWave,
-      })
-      if (next !== stateRef.current) {
-        stateRef.current = next
-        setState(next)
-      }
-      return next
-    },
-    [startWave, waveX]
-  )
 
   const scheduleNext = useCallback(
     (now: number, nextState: TickState) => {
       if (isPausedRef.current) return
       clearTimeoutRef()
-      if (nextState.waveActive) {
-        if (rafRef.current === null) {
-          const loop = () => {
-            if (isPausedRef.current) return
-            const frameNow = Date.now()
-            const latest = step(frameNow)
-            if (latest.waveActive) {
-              rafRef.current = requestAnimationFrame(loop)
-            } else {
-              rafRef.current = null
-              scheduleNext(frameNow, latest)
-            }
-          }
-          rafRef.current = requestAnimationFrame(loop)
-        }
-        return
+
+      const times: number[] = []
+      if (nextState.inFlight) {
+        times.push(nextState.workerBusyUntil)
+      }
+      if (nextState.exitingClearAt) {
+        times.push(nextState.exitingClearAt)
+      }
+      if (nextState.commandPhase === 'typing' || nextState.commandPhase === 'executing') {
+        times.push(nextState.commandNextAt)
+      } else {
+        times.push(nextState.nextCommandAt)
       }
 
-      const candidates = [nextState.workerBusyUntil, nextState.nextSpawnAt, nextState.nextWaveAt]
-      const future = candidates.filter(time => time > now)
+      const future = times.filter(time => time > now)
       if (future.length === 0) return
       const nextAt = Math.min(...future)
       const delay = Math.max(16, nextAt - now)
@@ -415,29 +380,13 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
     const handleVisibility = () => {
       if (document.hidden) {
         isPausedRef.current = true
-        // Pause wave animation
-        if (animationRef.current) {
-          animationRef.current.stop()
-        }
         clearTimeoutRef()
-        clearRaf()
-      } else {
-        isPausedRef.current = false
-        // Adjust timestamps on resume
-        const now = Date.now()
-        const nextState = {
-          ...stateRef.current,
-          waveActive: false, // Reset wave state on resume
-          showLabel: false,
-          workerBusyUntil: Math.max(stateRef.current.workerBusyUntil, now + 500),
-          nextSpawnAt: Math.max(stateRef.current.nextSpawnAt, now + 300),
-          nextWaveAt: Math.max(stateRef.current.nextWaveAt, now + 2000),
-        }
-        stateRef.current = nextState
-        setState(nextState)
-        waveX.set(-10)
-        scheduleNext(now, nextState)
+        return
       }
+      isPausedRef.current = false
+      const now = Date.now()
+      const latest = step(now)
+      scheduleNext(now, latest)
     }
 
     document.addEventListener('visibilitychange', handleVisibility)
@@ -446,24 +395,26 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
       clearTimeoutRef()
-      clearRaf()
-      if (animationRef.current) {
-        animationRef.current.stop()
-      }
     }
-  }, [clearRaf, clearTimeoutRef, scheduleNext, waveX])
+  }, [clearTimeoutRef, scheduleNext, step])
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
 
+  const commandText =
+    state.commandPhase === 'typing'
+      ? COMMAND_TEXT.slice(0, state.commandIndex)
+      : state.commandPhase === 'executing'
+        ? COMMAND_TEXT
+        : ''
+
   return {
     queue: state.queue,
     inFlight: state.inFlight,
     exitingIds: state.exitingIds,
-    waveX,
-    waveActive: state.waveActive,
-    showLabel: state.showLabel,
+    commandText,
+    commandPhase: state.commandPhase,
   }
 }
 

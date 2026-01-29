@@ -1,5 +1,5 @@
 import { Box } from '@chakra-ui/react'
-import { AnimatePresence, type MotionValue, motion, useMotionValue } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import {
   type InFlightItem,
@@ -186,7 +186,10 @@ function FlowChevron() {
   )
 }
 
-function PredicateLabel({ visible }: { visible: boolean }) {
+function PredicateLabel({ text, phase }: { text: string; phase: 'idle' | 'typing' | 'executing' }) {
+  const show = phase !== 'idle'
+  const cursor = phase === 'typing' ? '|' : ''
+
   return (
     <text
       x={24}
@@ -196,29 +199,12 @@ function PredicateLabel({ visible }: { visible: boolean }) {
       fill={COLORS.textMuted}
       style={{
         transition: 'opacity 200ms ease-out',
-        opacity: visible ? 0.8 : 0,
+        opacity: show ? (phase === 'executing' ? 0.9 : 0.7) : 0,
       }}
     >
-      edges &gt; 3
+      &gt; {text}
+      {cursor}
     </text>
-  )
-}
-
-function Wave({ x, active }: { x: MotionValue<number>; active: boolean }) {
-  if (!active) return null
-
-  return (
-    <motion.g style={{ x }}>
-      <line
-        x1={0}
-        y1={8}
-        x2={0}
-        y2={VIEWBOX.height - 8}
-        stroke={COLORS.strokeMuted}
-        strokeWidth={1}
-        strokeOpacity={0.6}
-      />
-    </motion.g>
   )
 }
 
@@ -229,7 +215,6 @@ function Wave({ x, active }: { x: MotionValue<number>; active: boolean }) {
 export default function CancellationVisual() {
   // Reduced motion preference
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
-  const staticWaveX = useMotionValue(-10)
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
@@ -247,9 +232,8 @@ export default function CancellationVisual() {
   // Use static data for reduced motion
   const queue = prefersReducedMotion ? STATIC_QUEUE : animatedState.queue
   const inFlight = prefersReducedMotion ? STATIC_IN_FLIGHT : animatedState.inFlight
-  const waveX = prefersReducedMotion ? staticWaveX : animatedState.waveX
-  const waveActive = prefersReducedMotion ? false : animatedState.waveActive
-  const showLabel = prefersReducedMotion ? false : animatedState.showLabel
+  const commandText = prefersReducedMotion ? '' : animatedState.commandText
+  const commandPhase = prefersReducedMotion ? 'idle' : animatedState.commandPhase
 
   return (
     <Box
@@ -276,7 +260,7 @@ export default function CancellationVisual() {
         <FlowChevron />
 
         {/* Predicate label */}
-        <PredicateLabel visible={showLabel} />
+        <PredicateLabel text={commandText} phase={commandPhase} />
 
         {/* Queue items with AnimatePresence for enter/exit */}
         <AnimatePresence>
@@ -290,8 +274,6 @@ export default function CancellationVisual() {
           {inFlight && <InFlightElement key={inFlight.id} item={inFlight} />}
         </AnimatePresence>
 
-        {/* Wave */}
-        <Wave x={waveX} active={waveActive} />
       </svg>
     </Box>
   )
