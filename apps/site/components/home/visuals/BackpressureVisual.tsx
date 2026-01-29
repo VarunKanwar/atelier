@@ -9,10 +9,10 @@ import {
 } from './hooks/useParticleFlow'
 
 const COLORS = {
-  particle: '#9CA3AF',
-  lensStroke: 'rgba(148, 163, 184, 0.35)',
-  lensFill: 'rgba(148, 163, 184, 0.08)',
-  lensHighlight: 'rgba(255, 255, 255, 0.35)',
+  particle: 'var(--stroke-muted)',
+  lensStroke: 'var(--lens-stroke)',
+  lensFill: 'var(--lens-fill)',
+  lensHighlight: 'var(--lens-highlight)',
 } as const
 
 // Particle visual properties as ratios of height

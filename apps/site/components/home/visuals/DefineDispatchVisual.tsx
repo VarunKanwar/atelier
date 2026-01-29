@@ -25,17 +25,17 @@ import {
  */
 
 const COLORS = {
-  surface: '#fff',
-  strokeBase: '#CBD5E1',
-  strokeActive: '#9CA3AF',
-  label: '#64748b',
-  ink: '#111827',  // Not used, needs a different name
-  inkDeep: '#0B0F14',   // Not used, needs a different name
+  canvas: 'var(--page-bg)',
+  surface: 'var(--surface)',
+  strokeBase: 'var(--stroke-subtle)',
+  strokeActive: 'var(--stroke-muted)',
+  label: 'var(--text-muted)',
 } as const
 
 // Layout anchors for the pipeline diagram in SVG coordinate space.
 const STROKE_WIDTH_BASE = 1.5
-const PACKET_THICKNESS = 1.5
+const PACKET_OUTER_WIDTH = STROKE_WIDTH_BASE * 4
+const PACKET_INNER_WIDTH = STROKE_WIDTH_BASE * 2
 const PACKET_LENGTH_PX = 28
 const WORKER_STEP_MS = 220
 const CURVE_BEND = 30
@@ -486,29 +486,6 @@ const getCenteredSlots = (count: number, max: number) => {
   return Array.from({ length: clamped }, (_, index) => start + index)
 }
 
-const hexToRgb = (hex: string) => {
-  const cleaned = hex.replace('#', '')
-  const value = Number.parseInt(cleaned, 16)
-  return {
-    r: (value >> 16) & 0xff,
-    g: (value >> 8) & 0xff,
-    b: value & 0xff,
-  }
-}
-
-const lerp = (start: number, end: number, t: number) => start + (end - start) * t
-
-const lerpColor = (from: string, to: string, t: number) => {
-  const a = hexToRgb(from)
-  const b = hexToRgb(to)
-  const r = Math.round(lerp(a.r, b.r, t))
-  const g = Math.round(lerp(a.g, b.g, t))
-  const bValue = Math.round(lerp(a.b, b.b, t))
-  return `#${r.toString(16).padStart(2, '0')}${g
-    .toString(16)
-    .padStart(2, '0')}${bValue.toString(16).padStart(2, '0')}`
-}
-
 const usePathLengths = (paths: Record<string, string>) => {
   const [lengths, setLengths] = useState<Record<string, number>>({})
 
@@ -538,14 +515,14 @@ function Packet({
   const config = STAGE_VISUALS[item.stage]
   const pathKey = typeof config.pathKey === 'function' ? config.pathKey(item) : config.pathKey
   const path = PATHS[pathKey]
-  const strokeColor = COLORS.strokeActive
+  const outerStroke = COLORS.strokeBase
+  const innerStroke = COLORS.canvas
   const startOffset = config.startOffset ?? '0%'
   const finalOffset = config.queueOffset
     ? config.queueOffset(queueIndex)
     : (config.endOffset ?? '100%')
   const duration = config.durationMs / 1000
 
-  const isProcess = item.stage.includes('process')
   const lengthPx = pathLengths[pathKey] ?? 100
   const segmentPercent = Math.min(100, (PACKET_LENGTH_PX / Math.max(1, lengthPx)) * 100)
   const dashArray = `${segmentPercent} ${100 - segmentPercent}`
@@ -560,9 +537,9 @@ function Packet({
       <motion.path
         d={path}
         pathLength={100}
-        stroke={strokeColor}
+        stroke={outerStroke}
         fill="none"
-        strokeWidth={PACKET_THICKNESS}
+        strokeWidth={PACKET_OUTER_WIDTH}
         strokeLinecap="round"
         strokeDasharray={dashArray}
         initial={{ strokeDashoffset: startDash, opacity: 0.9 }}
@@ -574,6 +551,19 @@ function Packet({
           duration: duration,
           ease: 'linear',
         }}
+        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+      />
+      <motion.path
+        d={path}
+        pathLength={100}
+        stroke={innerStroke}
+        fill="none"
+        strokeWidth={PACKET_INNER_WIDTH}
+        strokeLinecap="round"
+        strokeDasharray={dashArray}
+        initial={{ strokeDashoffset: startDash, opacity: 1 }}
+        animate={{ strokeDashoffset: endDash, opacity: 1 }}
+        transition={{ duration: duration, ease: 'linear' }}
         exit={{ opacity: 0, transition: { duration: 0.1 } }}
       />
     </g>
@@ -605,7 +595,7 @@ function MachineNode({
   const fillColor: string = COLORS.surface
   const pressure = queueLen / Math.max(1, maxWorkers)
   const loadRatio = Math.min(Math.max(pressure, 0), 1)
-  const strokeColor = lerpColor(COLORS.strokeBase, COLORS.strokeActive, loadRatio)
+  const strokeWidth = isActive || queueLen > 0 ? 1.25 : 1
 
   return (
     <g transform={`translate(${x}, ${y})`}>
@@ -617,11 +607,27 @@ function MachineNode({
         height={height}
         rx={radius}
         fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={isActive || queueLen > 0 ? 1.25 : 1}
-        animate={{ fill: fillColor, stroke: strokeColor }}
+        stroke={COLORS.strokeBase}
+        strokeWidth={strokeWidth}
+        animate={{ fill: fillColor }}
         transition={{ duration: 0.3 }}
       />
+      {loadRatio > 0 && (
+        <motion.rect
+          x={-width / 2}
+          y={-height / 2}
+          width={width}
+          height={height}
+          rx={radius}
+          fill="none"
+          stroke={COLORS.strokeActive}
+          strokeWidth={strokeWidth}
+          strokeOpacity={loadRatio}
+          animate={{ strokeOpacity: loadRatio }}
+          transition={{ duration: 0.3 }}
+          pointerEvents="none"
+        />
+      )}
 
       {activeWorkers > 0 && (
         <g transform="translate(0, 6)">
@@ -638,7 +644,7 @@ function MachineNode({
                 width={barWidth}
                 height={12}
                 rx={2}
-                fill={strokeColor}
+                fill={COLORS.strokeActive}
                 animate={{ height: [6, 12, 7], y: [-3, -6, -4] }}
                 transition={{
                   repeat: Infinity,
