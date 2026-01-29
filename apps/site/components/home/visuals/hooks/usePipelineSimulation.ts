@@ -123,18 +123,36 @@ export const usePipelineSimulation = () => {
 
         // --- 2. STATE MACHINE TRANSITIONS ---
         // Advance items based on duration and worker availability.
+        const preprocessQueue: PipelineItem[] = []
+        const inferenceQueue: PipelineItem[] = []
+        const thumbQueue: PipelineItem[] = []
+        let preprocessActive = 0
+        let inferenceActive = 0
+        let thumbActive = 0
+
+        for (const item of prevItems) {
+          if (item.stage === 'preprocess-queue') preprocessQueue.push(item)
+          else if (item.stage === 'inference-queue') inferenceQueue.push(item)
+          else if (item.stage === 'thumb-queue') thumbQueue.push(item)
+          else if (item.stage === 'preprocess') preprocessActive += 1
+          else if (item.stage === 'inference-process') inferenceActive += 1
+          else if (item.stage === 'thumb-process') thumbActive += 1
+        }
+
+        preprocessQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+        inferenceQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+        thumbQueue.sort((a, b) => a.enteredStageAt - b.enteredStageAt)
+
+        const preprocessHeadId = preprocessQueue[0]?.id
+        const inferenceHeadId = inferenceQueue[0]?.id
+        const thumbHeadId = thumbQueue[0]?.id
+
         const processedItems = prevItems.map(item => {
-          let nextItem = { ...item }
           const elapsed = now - item.enteredStageAt
 
           // Preprocess Queue -> Process
           if (item.stage === 'preprocess-queue') {
-            const activeWorkers = prevItems.filter(i => i.stage === 'preprocess').length
-            const queue = prevItems
-              .filter(i => i.stage === 'preprocess-queue')
-              .sort((a, b) => a.enteredStageAt - b.enteredStageAt)
-
-            const canProcess = activeWorkers < PREPROCESS_WORKERS && queue[0]?.id === item.id
+            const canProcess = preprocessActive < PREPROCESS_WORKERS && preprocessHeadId === item.id
             const hasTraveled = elapsed > TRAVEL_DURATION
 
             if (canProcess && hasTraveled) {
@@ -147,7 +165,7 @@ export const usePipelineSimulation = () => {
           if (item.stage === 'preprocess' && elapsed > PREPROCESS_DURATION) {
             hasChanges = true
             // Split into the inference branch...
-            nextItem = {
+            const nextItem: PipelineItem = {
               ...item,
               id: `${item.originalId}-infer`,
               type: 'inference',
@@ -169,12 +187,7 @@ export const usePipelineSimulation = () => {
           // Inference Queue -> Process
           // Only start when a worker is free and the item has traversed the path.
           if (item.stage === 'inference-queue') {
-            const activeWorkers = prevItems.filter(i => i.stage === 'inference-process').length
-            const queue = prevItems
-              .filter(i => i.stage === 'inference-queue')
-              .sort((a, b) => a.enteredStageAt - b.enteredStageAt)
-
-            const canProcess = activeWorkers < INFERENCE_WORKERS && queue[0]?.id === item.id
+            const canProcess = inferenceActive < INFERENCE_WORKERS && inferenceHeadId === item.id
             const hasTraveled = elapsed > TRAVEL_DURATION
 
             if (canProcess && hasTraveled) {
@@ -192,12 +205,7 @@ export const usePipelineSimulation = () => {
           // Thumbnail Queue -> Process
           // Only start when a worker is free and the item has traversed the path.
           if (item.stage === 'thumb-queue') {
-            const activeWorkers = prevItems.filter(i => i.stage === 'thumb-process').length
-            const queue = prevItems
-              .filter(i => i.stage === 'thumb-queue')
-              .sort((a, b) => a.enteredStageAt - b.enteredStageAt)
-
-            const canProcess = activeWorkers < THUMB_WORKERS && queue[0]?.id === item.id
+            const canProcess = thumbActive < THUMB_WORKERS && thumbHeadId === item.id
             const hasTraveled = elapsed > TRAVEL_DURATION
 
             if (canProcess && hasTraveled) {
