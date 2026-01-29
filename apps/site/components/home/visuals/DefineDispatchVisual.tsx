@@ -1,6 +1,6 @@
 import { Box } from '@chakra-ui/react'
 import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import {
   EXIT_DURATION,
   INFERENCE_DURATION,

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createBundledHighlighter, createSingletonShorthands } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import BackpressureVisual from './visuals/BackpressureVisual'
+import CancellationVisual from './visuals/CancellationVisual'
 import DefineDispatchVisual from './visuals/DefineDispatchVisual'
 
 const createHighlighter = createBundledHighlighter({
@@ -137,22 +138,6 @@ const CodeTabs = () => (
   </Tabs.Root>
 )
 
-const CancellationPlaceholder = () => (
-  <Box
-    h="100%"
-    minH="200px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Text fontSize="xs" color="gray.400">
-      [Cancellation animation]
-    </Text>
-  </Box>
-)
-
 const CrashRecoveryPlaceholder = () => (
   <Box
     h="100%"
@@ -260,7 +245,7 @@ const HomeFeatureGrid = () => {
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <CancellationPlaceholder />
+                  <CancellationVisual />
                 </Box>
               </Stack>
             </FeatureCell>

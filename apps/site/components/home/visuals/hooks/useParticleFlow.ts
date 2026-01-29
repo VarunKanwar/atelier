@@ -119,7 +119,12 @@ function getYBounds(x: number): YBounds {
   if (x <= ZONES.conduitStart) {
     const t = (x - ZONES.freeEnd) / (ZONES.conduitStart - ZONES.freeEnd)
     const halfHeight = FREE_ZONE_HALF_HEIGHT + (CONDUIT_HALF_HEIGHT - FREE_ZONE_HALF_HEIGHT) * t
-    return { minY: CENTER_Y - halfHeight, maxY: CENTER_Y + halfHeight, halfHeight, zone: 'entry-funnel' }
+    return {
+      minY: CENTER_Y - halfHeight,
+      maxY: CENTER_Y + halfHeight,
+      halfHeight,
+      zone: 'entry-funnel',
+    }
   }
 
   if (x <= ZONES.conduitEnd) {
@@ -129,7 +134,12 @@ function getYBounds(x: number): YBounds {
   if (x <= ZONES.arrivedStart) {
     const t = (x - ZONES.conduitEnd) / (ZONES.arrivedStart - ZONES.conduitEnd)
     const halfHeight = CONDUIT_HALF_HEIGHT + (FREE_ZONE_HALF_HEIGHT - CONDUIT_HALF_HEIGHT) * t
-    return { minY: CENTER_Y - halfHeight, maxY: CENTER_Y + halfHeight, halfHeight, zone: 'exit-funnel' }
+    return {
+      minY: CENTER_Y - halfHeight,
+      maxY: CENTER_Y + halfHeight,
+      halfHeight,
+      zone: 'exit-funnel',
+    }
   }
 
   return { minY: fullMin, maxY: fullMax, halfHeight: FREE_ZONE_HALF_HEIGHT, zone: 'arrived' }
@@ -254,7 +264,6 @@ export function useParticleFlow() {
             targetVx = DRIFT_ARRIVED
           }
 
-
           let wobbleAmp = next.wobbleAmp
           if (zone === 'exit-funnel') wobbleAmp *= 1.4
           if (zone === 'arrived') wobbleAmp *= 1.6
@@ -264,7 +273,8 @@ export function useParticleFlow() {
           const centerPull = baseCenterPull * centerPullScale
           const shouldSpread = !next.claimed && next.x >= ZONES.conduitEnd
           const exitTargetY = CENTER_Y + next.exitBias * FREE_ZONE_HALF_HEIGHT
-          const exitPull = zone === 'exit-funnel' ? EXIT_PULL : zone === 'arrived' ? ARRIVED_PULL : 0
+          const exitPull =
+            zone === 'exit-funnel' ? EXIT_PULL : zone === 'arrived' ? ARRIVED_PULL : 0
           const targetVy =
             (CENTER_Y - next.y) * centerPull +
             wobble * (1 - narrowness) * WOBBLE_BASE +
@@ -290,7 +300,6 @@ export function useParticleFlow() {
 
           const nextBounds = getYBounds(next.x)
           next.y = clamp(next.y, nextBounds.minY + 1, nextBounds.maxY - 1)
-
 
           if (next.x < 3) {
             next.x = 3

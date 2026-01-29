@@ -58,13 +58,7 @@ function ParticleElement({ particle, height }: { particle: Particle; height: num
   )
 }
 
-const Lens = ({
-  fillId,
-  highlightId,
-}: {
-  fillId: string
-  highlightId: string
-}) => {
+const Lens = ({ fillId, highlightId }: { fillId: string; highlightId: string }) => {
   const { width } = PARTICLE_FLOW_DIMENSIONS
   const { conduitStart, conduitEnd } = PARTICLE_FLOW_ZONES
   const { centerY, conduitHalfHeight } = PARTICLE_FLOW_GEOMETRY
@@ -158,7 +152,13 @@ export default function BackpressureVisual() {
             height={lensHeight + 24}
             filterUnits="userSpaceOnUse"
           >
-            <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="2" result="noise" />
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.012"
+              numOctaves="1"
+              seed="2"
+              result="noise"
+            />
             <feDisplacementMap
               in="SourceGraphic"
               in2="noise"
@@ -169,11 +169,27 @@ export default function BackpressureVisual() {
           </filter>
           <mask id={lensInsideId}>
             <rect x="0" y="0" width={width} height="100%" fill="black" />
-            <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="white" />
+            <rect
+              x={lensX}
+              y={lensY}
+              width={lensWidth}
+              height={lensHeight}
+              rx={radius}
+              ry={radius}
+              fill="white"
+            />
           </mask>
           <mask id={lensOutsideId}>
             <rect x="0" y="0" width={width} height="100%" fill="white" />
-            <rect x={lensX} y={lensY} width={lensWidth} height={lensHeight} rx={radius} ry={radius} fill="black" />
+            <rect
+              x={lensX}
+              y={lensY}
+              width={lensWidth}
+              height={lensHeight}
+              rx={radius}
+              ry={radius}
+              fill="black"
+            />
           </mask>
           <g id={particleLayerId}>
             {particles.map(particle => (
