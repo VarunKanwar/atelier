@@ -144,71 +144,119 @@ function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
     nextSpawnAt,
     nextWaveAt,
   } = state
+  let didChange = false
+  let queueCloned = false
+  let exitingCloned = false
 
-  // Clone mutable collections
-  queue = [...queue]
-  exitingIds = new Set(exitingIds)
+  const ensureQueue = () => {
+    if (!queueCloned) {
+      queue = [...queue]
+      queueCloned = true
+      didChange = true
+    }
+  }
+
+  const ensureExiting = () => {
+    if (!exitingCloned) {
+      exitingIds = new Set(exitingIds)
+      exitingCloned = true
+      didChange = true
+    }
+  }
 
   // Clear old exiting items (they've had time to animate out)
   if (exitingIds.size > 0 && !waveActive) {
+    ensureExiting()
     exitingIds.clear()
   }
 
   // Wave logic - check cancellations based on current waveX
   if (waveActive) {
     // Check queue items against wave position (left to right)
-    const survivingQueue: QueuedItem[] = []
+    let survivingQueue: QueuedItem[] | null = null
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i]
       const slotX = QUEUE_SLOTS[i]
 
-      if (waveX >= slotX && item.edges > 3 && !exitingIds.has(item.id)) {
+      const alreadyExiting = exitingIds.has(item.id)
+      const shouldCancel = waveX >= slotX && item.edges > 3 && !alreadyExiting
+
+      if (alreadyExiting || shouldCancel) {
         // Cancel this item
-        exitingIds.add(item.id)
-      } else if (!exitingIds.has(item.id)) {
+        if (shouldCancel) {
+          ensureExiting()
+          exitingIds.add(item.id)
+        }
+        if (!survivingQueue) {
+          survivingQueue = queue.slice(0, i)
+        }
+        continue
+      }
+      if (survivingQueue) {
         survivingQueue.push(item)
       }
     }
-    queue = survivingQueue
+    if (survivingQueue) {
+      queue = survivingQueue
+      didChange = true
+    }
 
     // Check in-flight item
     if (inFlight && waveX >= WORKER_X && inFlight.edges > 3 && !exitingIds.has(inFlight.id)) {
+      ensureExiting()
       exitingIds.add(inFlight.id)
       inFlight = null
+      didChange = true
       // Immediately promote front of queue if available
+      if (queue.length > 0) {
+        ensureQueue()
+      }
       const promoted = queue.shift()
       if (promoted) {
         inFlight = { ...promoted }
         workerBusyUntil = now + randomRange(...PROCESS_TIME)
+        didChange = true
       }
     }
 
     // Wave complete
     if (waveX >= VIEWBOX_WIDTH) {
-      waveActive = false
-      showLabel = false
+      if (waveActive) {
+        waveActive = false
+        didChange = true
+      }
+      if (showLabel) {
+        showLabel = false
+        didChange = true
+      }
     }
   }
 
   // Promotion: if worker empty and not during wave, promote front item
   if (!inFlight && !waveActive && queue.length > 0 && now >= workerBusyUntil) {
+    ensureQueue()
     const promoted = queue.shift()
     if (promoted) {
       inFlight = { ...promoted }
       workerBusyUntil = now + randomRange(...PROCESS_TIME)
+      didChange = true
     }
   }
 
   // Worker completion: item exits, becomes available for next
   if (inFlight && now >= workerBusyUntil && !waveActive) {
+    ensureExiting()
     exitingIds.add(inFlight.id)
     inFlight = null
+    didChange = true
   }
 
   // Spawning: add items to back of queue
   if (queue.length < MAX_QUEUE_SIZE && now >= nextSpawnAt && !waveActive) {
+    ensureQueue()
     queue.push(createItem())
     nextSpawnAt = now + randomRange(...SPAWN_INTERVAL)
+    didChange = true
   }
 
   // Trigger wave
@@ -217,6 +265,11 @@ function tick({ state, now, waveX, onStartWave }: TickParams): TickState {
     showLabel = true
     onStartWave() // Start the Framer Motion animation
     nextWaveAt = now + randomRange(...WAVE_INTERVAL)
+    didChange = true
+  }
+
+  if (!didChange) {
+    return state
   }
 
   return {

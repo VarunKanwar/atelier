@@ -279,14 +279,14 @@ export default function CancellationVisual() {
         <PredicateLabel visible={showLabel} />
 
         {/* Queue items with AnimatePresence for enter/exit */}
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
           {queue.map((item, index) => (
             <QueueItemElement key={item.id} item={item} slotIndex={index} />
           ))}
         </AnimatePresence>
 
         {/* In-flight item with AnimatePresence */}
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
           {inFlight && <InFlightElement key={inFlight.id} item={inFlight} />}
         </AnimatePresence>
 
