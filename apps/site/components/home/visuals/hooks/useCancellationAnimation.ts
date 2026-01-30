@@ -36,6 +36,8 @@ interface TickState {
   cancelingUntil: number | null
   postCancelPauseUntil: number | null
   workerBusyUntil: number
+  collapseNextAt: number | null
+  spawnNextAt: number | null
   commandPhase: CommandPhase
   commandIndex: number
   commandNextAt: number
@@ -62,6 +64,10 @@ const EXECUTE_PAUSE_MS = 1000
 export const CANCEL_ANIMATION_MS = 700
 const POST_CANCEL_PAUSE_MS = 500
 const MAX_QUEUE_SIZE = 4
+export const QUEUE_SHIFT_DELAY_MS = 100
+export const QUEUE_MOVE_MS = 100
+export const QUEUE_ENTRY_X = 0
+const QUEUE_SPAWN_DELAY_MS = 100
 
 // Queue slot x positions (fixed)
 // Index 0 = front of queue (closest to worker), Index 3 = back (furthest)
@@ -127,6 +133,15 @@ function createItem(): QueuedItem {
   }
 }
 
+function hasGap(queue: QueueSlot[]): boolean {
+  for (let i = 0; i < queue.length - 1; i++) {
+    if (queue[i] === null && queue[i + 1] !== null) {
+      return true
+    }
+  }
+  return false
+}
+
 // -----------------------------------------------------------------------------
 // Tick function
 // -----------------------------------------------------------------------------
@@ -144,6 +159,8 @@ function tick({ state, now }: TickParams): TickState {
     cancelingUntil,
     postCancelPauseUntil,
     workerBusyUntil,
+    collapseNextAt,
+    spawnNextAt,
     commandPhase,
     commandIndex,
     commandNextAt,
@@ -174,8 +191,28 @@ function tick({ state, now }: TickParams): TickState {
     }
   }
 
+  const promoteFront = () => {
+    if (inFlight) return
+    const promoted = queue[0]
+    if (!promoted) return
+    ensureQueue()
+    queue[0] = null
+    inFlight = { ...promoted }
+    workerBusyUntil = now + randomRange(...PROCESS_TIME)
+    didChange = true
+  }
+
   if (postCancelPauseUntil && now >= postCancelPauseUntil) {
     postCancelPauseUntil = null
+    didChange = true
+  }
+
+  if (isQueuePaused() && collapseNextAt) {
+    collapseNextAt = null
+    didChange = true
+  }
+  if (isQueuePaused() && spawnNextAt) {
+    spawnNextAt = null
     didChange = true
   }
 
@@ -254,45 +291,48 @@ function tick({ state, now }: TickParams): TickState {
   }
 
   if (!isQueuePaused()) {
-    const hasHoles = queue.some(slot => slot === null) && queue.some(slot => slot !== null)
-    if (hasHoles) {
-      ensureQueue()
-      const compacted: QueueSlot[] = Array(MAX_QUEUE_SIZE).fill(null)
-      let nextIndex = 0
-      for (const slot of queue) {
-        if (!slot) continue
-        compacted[nextIndex] = slot
-        nextIndex += 1
+    const lastSlotIndex = MAX_QUEUE_SIZE - 1
+    if (collapseNextAt !== null && now >= collapseNextAt) {
+      if (hasGap(queue)) {
+        ensureQueue()
+        const compacted: QueueSlot[] = Array(MAX_QUEUE_SIZE).fill(null)
+        let nextIndex = 0
+        for (const slot of queue) {
+          if (!slot) continue
+          compacted[nextIndex] = slot
+          nextIndex += 1
+        }
+        queue = compacted
+        didChange = true
       }
-      queue = compacted
+      collapseNextAt = null
+      didChange = true
+    } else if (collapseNextAt === null && hasGap(queue)) {
+      collapseNextAt = now + QUEUE_SHIFT_DELAY_MS
       didChange = true
     }
 
-    if (!inFlight) {
-      const promoteIndex = queue.findIndex(slot => slot !== null)
-      if (promoteIndex >= 0) {
-        const promoted = queue[promoteIndex]
-        if (promoted) {
-          ensureQueue()
-          queue[promoteIndex] = null
-          inFlight = { ...promoted }
-          workerBusyUntil = now + randomRange(...PROCESS_TIME)
-          didChange = true
-        }
-      }
-    }
-
-    let filled = false
-    for (let i = MAX_QUEUE_SIZE - 1; i >= 0; i--) {
-      if (queue[i] === null) {
+    const canSpawn = !hasGap(queue) && queue[lastSlotIndex] === null
+    if (canSpawn) {
+      if (spawnNextAt === null) {
+        spawnNextAt = now + QUEUE_SPAWN_DELAY_MS
+        didChange = true
+      } else if (now >= spawnNextAt) {
         ensureQueue()
-        queue[i] = createItem()
-        filled = true
+        queue[lastSlotIndex] = createItem()
+        spawnNextAt = null
         didChange = true
       }
+    } else if (spawnNextAt !== null) {
+      spawnNextAt = null
+      didChange = true
     }
-    if (filled) {
-      // Preserve queue reference updates.
+
+    promoteFront()
+
+    if (collapseNextAt === null && hasGap(queue)) {
+      collapseNextAt = now + QUEUE_SHIFT_DELAY_MS
+      didChange = true
     }
   }
 
@@ -307,6 +347,8 @@ function tick({ state, now }: TickParams): TickState {
     cancelingUntil,
     postCancelPauseUntil,
     workerBusyUntil,
+    collapseNextAt,
+    spawnNextAt,
     commandPhase,
     commandIndex,
     commandNextAt,
@@ -342,6 +384,8 @@ function createInitialState(): TickState {
     cancelingUntil: null,
     postCancelPauseUntil: null,
     workerBusyUntil: now + randomRange(...PROCESS_TIME),
+    collapseNextAt: null,
+    spawnNextAt: null,
     commandPhase: 'idle',
     commandIndex: 0,
     commandNextAt: now + TYPE_INTERVAL_MS,
@@ -392,6 +436,12 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
         times.push(nextState.commandNextAt)
       } else {
         times.push(nextState.nextCommandAt)
+      }
+      if (nextState.collapseNextAt) {
+        times.push(nextState.collapseNextAt)
+      }
+      if (nextState.spawnNextAt) {
+        times.push(nextState.spawnNextAt)
       }
 
       const future = times.filter(time => time > now)
