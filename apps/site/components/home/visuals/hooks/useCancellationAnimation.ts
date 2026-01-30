@@ -32,6 +32,7 @@ export interface InFlightItem {
 interface TickState {
   queue: QueueSlot[] // ordered array, index = slot position
   inFlight: InFlightItem | null
+  inFlightDurationMs: number | null
   cancelingIds: Set<string>
   cancelingUntil: number | null
   postCancelPauseUntil: number | null
@@ -47,6 +48,7 @@ interface TickState {
 export interface UseCancellationAnimationReturn {
   queue: QueueSlot[]
   inFlight: InFlightItem | null
+  inFlightDurationMs: number | null
   cancelingIds: Set<string>
   commandText: string
   commandPhase: CommandPhase
@@ -155,6 +157,7 @@ function tick({ state, now }: TickParams): TickState {
   let {
     queue,
     inFlight,
+    inFlightDurationMs,
     cancelingIds,
     cancelingUntil,
     postCancelPauseUntil,
@@ -198,7 +201,9 @@ function tick({ state, now }: TickParams): TickState {
     ensureQueue()
     queue[0] = null
     inFlight = { ...promoted }
-    workerBusyUntil = now + randomRange(...PROCESS_TIME)
+    const duration = randomRange(...PROCESS_TIME)
+    workerBusyUntil = now + duration
+    inFlightDurationMs = duration
     didChange = true
   }
 
@@ -269,10 +274,11 @@ function tick({ state, now }: TickParams): TickState {
             didChange = true
           }
         }
-        if (inFlight && cancelingIds.has(inFlight.id)) {
-          inFlight = null
-          didChange = true
-        }
+      if (inFlight && cancelingIds.has(inFlight.id)) {
+        inFlight = null
+        inFlightDurationMs = null
+        didChange = true
+      }
         ensureCanceling()
         cancelingIds.clear()
       }
@@ -287,6 +293,7 @@ function tick({ state, now }: TickParams): TickState {
 
   if (!isQueuePaused() && inFlight && now >= workerBusyUntil) {
     inFlight = null
+    inFlightDurationMs = null
     didChange = true
   }
 
@@ -343,6 +350,7 @@ function tick({ state, now }: TickParams): TickState {
   return {
     queue,
     inFlight,
+    inFlightDurationMs,
     cancelingIds,
     cancelingUntil,
     postCancelPauseUntil,
@@ -365,6 +373,7 @@ function createInitialState(): TickState {
 
   // Start with one item in-flight
   const inFlightShape = randomShape()
+  const inFlightDurationMs = randomRange(...PROCESS_TIME)
   const inFlight: InFlightItem = {
     id: nextId(),
     shape: inFlightShape,
@@ -380,10 +389,11 @@ function createInitialState(): TickState {
   return {
     queue,
     inFlight,
+    inFlightDurationMs,
     cancelingIds: new Set(),
     cancelingUntil: null,
     postCancelPauseUntil: null,
-    workerBusyUntil: now + randomRange(...PROCESS_TIME),
+    workerBusyUntil: now + inFlightDurationMs,
     collapseNextAt: null,
     spawnNextAt: null,
     commandPhase: 'idle',
@@ -494,6 +504,7 @@ export function useCancellationAnimation(): UseCancellationAnimationReturn {
   return {
     queue: state.queue,
     inFlight: state.inFlight,
+    inFlightDurationMs: state.inFlightDurationMs,
     cancelingIds: state.cancelingIds,
     commandText,
     commandPhase: state.commandPhase,
