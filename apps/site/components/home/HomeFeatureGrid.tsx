@@ -5,7 +5,7 @@ import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import BackpressureVisual from './visuals/BackpressureVisual'
 import CancellationVisual from './visuals/CancellationVisual'
 import DefineDispatchVisual from './visuals/DefineDispatchVisual'
-import ObservabilityVisualA from './visuals/ObservabilityVisualA'
+import ObservabilityVisual from './visuals/ObservabilityVisual'
 
 const createHighlighter = createBundledHighlighter({
   langs: {
@@ -267,7 +267,7 @@ const HomeFeatureGrid = () => {
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <ObservabilityVisualA />
+                  <ObservabilityVisual />
                 </Box>
               </Stack>
             </FeatureCell>

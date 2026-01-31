@@ -31,7 +31,7 @@ const TASK_GROUPS = [
   { spanIds: ['classify-1', 'classify-2'] },
 ]
 
-export default function ObservabilityVisualA() {
+export default function ObservabilityVisual() {
   const { progress, prefersReducedMotion } = useObservabilityTimeline()
 
   const spanMap = new Map(OBS_TRACE.spans.map(s => [s.id, s]))
