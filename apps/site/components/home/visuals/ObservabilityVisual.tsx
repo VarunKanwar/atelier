@@ -1,6 +1,6 @@
 import { Box } from '@chakra-ui/react'
-import { OBS_TRACE, segmentEnd, type SpanSegment } from './observabilityData'
 import { useObservabilityTimeline } from './hooks/useObservabilityTimeline'
+import { OBS_TRACE, type SpanSegment, segmentEnd } from './observabilityData'
 
 const VIEWBOX = { width: 280, height: 160 }
 const PADDING = { x: 12, y: 12 }
