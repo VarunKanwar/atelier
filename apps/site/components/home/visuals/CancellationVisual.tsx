@@ -5,8 +5,8 @@ import {
   CANCEL_ANIMATION_MS,
   type InFlightItem,
   QUEUE_ENTRY_X,
-  QUEUE_SLOTS,
   QUEUE_MOVE_MS,
+  QUEUE_SLOTS,
   type QueuedItem,
   type Shape,
   STATIC_IN_FLIGHT,
@@ -66,9 +66,7 @@ function ShapeRenderer({
 
   switch (shape) {
     case 'circle':
-      return (
-        <circle r={SHAPE_SIZE * 0.8} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-      )
+      return <circle r={SHAPE_SIZE * 0.8} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
 
     case 'triangle':
       return (
@@ -180,9 +178,7 @@ interface QueueItemProps {
 
 function QueueItemElement({ item, slotIndex, isCanceling }: QueueItemProps) {
   const x = QUEUE_SLOTS[slotIndex]
-  const exit = isCanceling
-    ? { opacity: 0, scale: 0.15, rotate: -18 }
-    : { opacity: 0, scale: 0.5 }
+  const exit = isCanceling ? { opacity: 0, scale: 0.15, rotate: -18 } : { opacity: 0, scale: 0.5 }
 
   return (
     <motion.g
@@ -216,7 +212,7 @@ function InFlightElement({ item, isCanceling, durationMs }: InFlightProps) {
     : { opacity: 0, x: WORKER_X + 30 }
   const fillId = `inflight-fill-${item.id}`
   const fillTransition = durationMs
-    ? { duration: durationMs / 1000, ease: 'linear' }
+    ? { duration: durationMs / 1000, ease: 'linear' as const }
     : { duration: 0 }
 
   return (

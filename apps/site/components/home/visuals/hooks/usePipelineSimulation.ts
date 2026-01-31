@@ -71,6 +71,7 @@ export const usePipelineSimulation = () => {
     }
   }, [])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cycle triggers upload phase reset
   useEffect(() => {
     setUploadState({ phase: 'upload' })
     setUploadCueActive(false)
@@ -147,7 +148,7 @@ export const usePipelineSimulation = () => {
         const inferenceHeadId = inferenceQueue[0]?.id
         const thumbHeadId = thumbQueue[0]?.id
 
-        const processedItems = prevItems.map(item => {
+        const processedItems = prevItems.map((item): PipelineItem => {
           const elapsed = now - item.enteredStageAt
 
           // Preprocess Queue -> Process

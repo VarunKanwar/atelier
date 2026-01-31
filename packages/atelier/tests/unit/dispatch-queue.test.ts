@@ -384,7 +384,7 @@ describe('DispatchQueue', () => {
 
       expect(queue.getState().waiting).toBe(2)
 
-      gates.get('in-flight')!.resolve()
+      gates.get('in-flight')?.resolve()
       await tick()
       await tick()
 
@@ -395,10 +395,10 @@ describe('DispatchQueue', () => {
       expect(stateAfterAbort.waiting).toBe(0)
       expect(stateAfterAbort.pending).toBe(1)
 
-      gates.get('waiting-a')!.resolve()
-      gates.get('pending')!.resolve()
+      gates.get('waiting-a')?.resolve()
+      gates.get('pending')?.resolve()
       await tick()
-      gates.get('waiting-b')!.resolve()
+      gates.get('waiting-b')?.resolve()
       await waitingB
     })
 
