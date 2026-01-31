@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import {
   CANCEL_ANIMATION_MS,
   type InFlightItem,
+  QUEUE_ENTRY_X,
   QUEUE_SLOTS,
+  QUEUE_MOVE_MS,
   type QueuedItem,
   type Shape,
   STATIC_IN_FLIGHT,
@@ -22,6 +24,7 @@ const SHAPE_SIZE = 6
 const WORKER_BOX = { x: 184, y: 24, width: 80, height: 32 }
 const CENTER_Y = 40
 const CANCEL_ANIMATION_S = CANCEL_ANIMATION_MS / 1000
+const QUEUE_MOVE_S = QUEUE_MOVE_MS / 1000
 
 const COLORS = {
   stroke: 'var(--stroke-subtle)',
@@ -173,10 +176,10 @@ function QueueItemElement({ item, slotIndex, isCanceling }: QueueItemProps) {
 
   return (
     <motion.g
-      initial={{ opacity: 0, x: x - 20 }}
+      initial={{ opacity: 0, x: QUEUE_ENTRY_X }}
       animate={{ opacity: 1, x, y: CENTER_Y }}
       exit={exit}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      transition={{ duration: QUEUE_MOVE_S, ease: [0.16, 1, 0.3, 1] }}
     >
       {isCanceling ? (
         <FragmentScatter stroke={COLORS.strokeCancel} />
@@ -206,7 +209,7 @@ function InFlightElement({ item, isCanceling }: InFlightProps) {
       initial={{ opacity: 0, x: QUEUE_SLOTS[0] }}
       animate={{ opacity: 1, x: WORKER_X, y: CENTER_Y }}
       exit={exit}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      transition={{ duration: QUEUE_MOVE_S, ease: [0.16, 1, 0.3, 1] }}
     >
       {isCanceling ? (
         <FragmentScatter stroke={COLORS.strokeCancel} />
