@@ -53,18 +53,28 @@ function polygonPoints(radius: number, sides: number): string {
   }).join(' ')
 }
 
-function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke?: string }) {
+function ShapeRenderer({
+  shape,
+  stroke = COLORS.stroke,
+  fill = 'none',
+}: {
+  shape: Shape
+  stroke?: string
+  fill?: string
+}) {
   const strokeWidth = 1
 
   switch (shape) {
     case 'circle':
-      return <circle r={SHAPE_SIZE * 0.8} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+      return (
+        <circle r={SHAPE_SIZE * 0.8} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      )
 
     case 'triangle':
       return (
         <polygon
           points={polygonPoints(SHAPE_SIZE, 3)}
-          fill="none"
+          fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
@@ -79,7 +89,7 @@ function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke
           y={-s / 2}
           width={s}
           height={s}
-          fill="none"
+          fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
         />
@@ -90,7 +100,7 @@ function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke
       return (
         <polygon
           points={polygonPoints(SHAPE_SIZE, 4)}
-          fill="none"
+          fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
@@ -101,7 +111,7 @@ function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke
       return (
         <polygon
           points={polygonPoints(SHAPE_SIZE, 5)}
-          fill="none"
+          fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
@@ -112,7 +122,7 @@ function ShapeRenderer({ shape, stroke = COLORS.stroke }: { shape: Shape; stroke
       return (
         <polygon
           points={polygonPoints(SHAPE_SIZE, 6)}
-          fill="none"
+          fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
@@ -197,12 +207,17 @@ function QueueItemElement({ item, slotIndex, isCanceling }: QueueItemProps) {
 interface InFlightProps {
   item: InFlightItem
   isCanceling: boolean
+  durationMs: number | null
 }
 
-function InFlightElement({ item, isCanceling }: InFlightProps) {
+function InFlightElement({ item, isCanceling, durationMs }: InFlightProps) {
   const exit = isCanceling
     ? { opacity: 0, scale: 0.15, rotate: 18 }
     : { opacity: 0, x: WORKER_X + 30 }
+  const fillId = `inflight-fill-${item.id}`
+  const fillTransition = durationMs
+    ? { duration: durationMs / 1000, ease: 'linear' }
+    : { duration: 0 }
 
   return (
     <motion.g
@@ -214,7 +229,34 @@ function InFlightElement({ item, isCanceling }: InFlightProps) {
       {isCanceling ? (
         <FragmentScatter stroke={COLORS.strokeCancel} />
       ) : (
-        <ShapeRenderer shape={item.shape} />
+        <g>
+          {durationMs ? (
+            <>
+              <defs>
+                <linearGradient id={fillId} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset={0} stopColor={COLORS.stroke} />
+                  <motion.stop
+                    initial={{ offset: 0 }}
+                    animate={{ offset: 1 }}
+                    transition={fillTransition}
+                    stopColor={COLORS.stroke}
+                  />
+                  <motion.stop
+                    initial={{ offset: 0 }}
+                    animate={{ offset: 1 }}
+                    transition={fillTransition}
+                    stopColor="transparent"
+                  />
+                  <stop offset={1} stopColor="transparent" />
+                </linearGradient>
+              </defs>
+              <ShapeRenderer shape={item.shape} stroke="none" fill={`url(#${fillId})`} />
+              <ShapeRenderer shape={item.shape} />
+            </>
+          ) : (
+            <ShapeRenderer shape={item.shape} />
+          )}
+        </g>
       )}
     </motion.g>
   )
@@ -299,6 +341,7 @@ export default function CancellationVisual() {
   // Use static data for reduced motion
   const queue = prefersReducedMotion ? STATIC_QUEUE : animatedState.queue
   const inFlight = prefersReducedMotion ? STATIC_IN_FLIGHT : animatedState.inFlight
+  const inFlightDurationMs = prefersReducedMotion ? null : animatedState.inFlightDurationMs
   const cancelingIds = prefersReducedMotion ? new Set<string>() : animatedState.cancelingIds
   const commandText = prefersReducedMotion ? '' : animatedState.commandText
   const commandPhase = prefersReducedMotion ? 'idle' : animatedState.commandPhase
@@ -352,6 +395,7 @@ export default function CancellationVisual() {
               key={inFlight.id}
               item={inFlight}
               isCanceling={cancelingIds.has(inFlight.id)}
+              durationMs={inFlightDurationMs}
             />
           )}
         </AnimatePresence>
