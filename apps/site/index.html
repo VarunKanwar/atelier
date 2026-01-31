@@ -13,12 +13,12 @@
     <script>
       ;((l) => {
         if (l.search[1] === '/') {
-          var decoded = l.search
+          const decoded = l.search
             .slice(1)
             .split('&')
             .map((s) => s.replace(/~and~/g, '&'))
             .join('&')
-          var base = l.pathname.replace(/\/$/, '')
+          const base = l.pathname.replace(/\/$/, '')
           window.history.replaceState(null, '', base + decoded + l.hash)
         }
       })(window.location)

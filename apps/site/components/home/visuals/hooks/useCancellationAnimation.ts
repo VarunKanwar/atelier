@@ -182,8 +182,7 @@ function tick({ state, now }: TickParams): TickState {
   }
 
   const isCanceling = () => cancelingUntil !== null && now < cancelingUntil
-  const isPostCancelPaused = () =>
-    postCancelPauseUntil !== null && now < postCancelPauseUntil
+  const isPostCancelPaused = () => postCancelPauseUntil !== null && now < postCancelPauseUntil
   const isQueuePaused = () => isCanceling() || isPostCancelPaused()
 
   const ensureCanceling = () => {
@@ -274,11 +273,11 @@ function tick({ state, now }: TickParams): TickState {
             didChange = true
           }
         }
-      if (inFlight && cancelingIds.has(inFlight.id)) {
-        inFlight = null
-        inFlightDurationMs = null
-        didChange = true
-      }
+        if (inFlight && cancelingIds.has(inFlight.id)) {
+          inFlight = null
+          inFlightDurationMs = null
+          didChange = true
+        }
         ensureCanceling()
         cancelingIds.clear()
       }
