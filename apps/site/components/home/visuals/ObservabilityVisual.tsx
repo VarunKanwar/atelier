@@ -1,6 +1,12 @@
 import { Box } from '@chakra-ui/react'
 import { useObservabilityTimeline } from './hooks/useObservabilityTimeline'
-import { OBS_TRACE, type SpanSegment, segmentEnd } from './observabilityData'
+import {
+  OBS_GROUP_ORDER,
+  OBS_TRACE,
+  type ObservabilitySpan,
+  type SpanSegment,
+  segmentEnd,
+} from './observabilityData'
 
 const VIEWBOX = { width: 280, height: 160 }
 const PADDING = { x: 12, y: 12 }
@@ -8,6 +14,7 @@ const TRACE_HEADER_HEIGHT = 12
 const TASK_GROUP_GAP = 6
 const ROW_HEIGHT = 12
 const BAR_HEIGHT = 5
+const GROUP_PADDING = 6
 const TIMELINE_X = PADDING.x + 8
 const TIMELINE_WIDTH = VIEWBOX.width - TIMELINE_X - PADDING.x - 8
 
@@ -20,31 +27,38 @@ const COLORS = {
 } as const
 
 const getBarOpacity = (progress: number, segment: SpanSegment, base: number) => {
-  if (progress < segment.start) return base * 0.25
-  if (progress > segmentEnd(segment)) return base * 0.65
-  return base
+  const end = segmentEnd(segment)
+  if (progress < end) return 0
+  const revealWindow = 0.02
+  const t = Math.min(1, Math.max(0, (progress - end) / revealWindow))
+  return base * t
 }
 
-// Group spans by task type
-const TASK_GROUPS = [
-  { spanIds: ['preprocess-1', 'preprocess-2', 'preprocess-3'] },
-  { spanIds: ['classify-1', 'classify-2'] },
-]
+const getStatusOpacity = (progress: number, spanEnd: number, base: number) => {
+  if (progress < spanEnd) return 0
+  const revealWindow = 0.02
+  const t = Math.min(1, Math.max(0, (progress - spanEnd) / revealWindow))
+  return base * t
+}
+
+const buildGroupLayout = (spans: ObservabilitySpan[]) => {
+  const grouped = OBS_GROUP_ORDER.map(key => ({
+    key,
+    spans: spans.filter(span => span.group === key),
+  })).filter(group => group.spans.length > 0)
+
+  let currentY = PADDING.y + TRACE_HEADER_HEIGHT + 4
+  return grouped.map(group => {
+    const groupHeight = group.spans.length * ROW_HEIGHT + GROUP_PADDING
+    const startY = currentY
+    currentY += groupHeight + TASK_GROUP_GAP
+    return { ...group, startY, groupHeight }
+  })
+}
 
 export default function ObservabilityVisual() {
   const { progress, prefersReducedMotion } = useObservabilityTimeline()
-
-  const spanMap = new Map(OBS_TRACE.spans.map(s => [s.id, s]))
-
-  let currentY = PADDING.y + TRACE_HEADER_HEIGHT + 4
-
-  const groupPositions = TASK_GROUPS.map(group => {
-    const startY = currentY
-    const spans = group.spanIds.map(id => spanMap.get(id)).filter(Boolean)
-    const groupHeight = spans.length * ROW_HEIGHT + 6
-    currentY += groupHeight + TASK_GROUP_GAP
-    return { group, startY, spans, groupHeight }
-  })
+  const groupPositions = buildGroupLayout(OBS_TRACE.spans)
 
   return (
     <Box
@@ -96,8 +110,8 @@ export default function ObservabilityVisual() {
         />
 
         {/* Task groups */}
-        {groupPositions.map(({ startY, spans, groupHeight }, groupIndex) => (
-          <g key={groupIndex}>
+        {groupPositions.map(({ key: groupKey, startY, spans, groupHeight }) => (
+          <g key={groupKey}>
             {/* Group background */}
             <rect
               x={PADDING.x + 4}
@@ -112,6 +126,11 @@ export default function ObservabilityVisual() {
             {spans.map((span, index) => {
               if (!span) return null
               const rowY = startY + 3 + index * ROW_HEIGHT + ROW_HEIGHT / 2
+              const spanEnd = Math.max(...span.segments.map(segment => segmentEnd(segment)))
+              const statusOpacity = prefersReducedMotion
+                ? 0.6
+                : getStatusOpacity(progress, spanEnd, 0.6)
+              const statusX = VIEWBOX.width - PADDING.x - 10
 
               return (
                 <g key={span.id}>
@@ -151,32 +170,47 @@ export default function ObservabilityVisual() {
                     )
                   })}
 
-                  {/* Status indicator */}
+                  {/* Status indicator at span end */}
                   {span.status === 'ok' ? (
-                    <circle
-                      cx={VIEWBOX.width - PADDING.x - 10}
-                      cy={rowY}
-                      r={2}
-                      fill={COLORS.execFill}
-                      opacity={0.5}
-                    />
-                  ) : span.status === 'canceled' ? (
-                    <g opacity={0.5}>
+                    <g style={{ opacity: statusOpacity, transition: 'opacity 120ms ease-out' }}>
                       <line
-                        x1={VIEWBOX.width - PADDING.x - 12}
-                        y1={rowY - 2}
-                        x2={VIEWBOX.width - PADDING.x - 8}
-                        y2={rowY + 2}
+                        x1={statusX - 1.5}
+                        y1={rowY + 0.5}
+                        x2={statusX - 0.2}
+                        y2={rowY + 1.8}
                         stroke={COLORS.execFill}
                         strokeWidth={1}
+                        strokeLinecap="round"
                       />
                       <line
-                        x1={VIEWBOX.width - PADDING.x - 8}
-                        y1={rowY - 2}
-                        x2={VIEWBOX.width - PADDING.x - 12}
-                        y2={rowY + 2}
+                        x1={statusX - 0.2}
+                        y1={rowY + 1.8}
+                        x2={statusX + 2.6}
+                        y2={rowY - 1.2}
                         stroke={COLORS.execFill}
                         strokeWidth={1}
+                        strokeLinecap="round"
+                      />
+                    </g>
+                  ) : span.status === 'canceled' || span.status === 'error' ? (
+                    <g style={{ opacity: statusOpacity, transition: 'opacity 120ms ease-out' }}>
+                      <line
+                        x1={statusX - 1.6}
+                        y1={rowY - 1.6}
+                        x2={statusX + 1.6}
+                        y2={rowY + 1.6}
+                        stroke={COLORS.execFill}
+                        strokeWidth={1}
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1={statusX + 1.6}
+                        y1={rowY - 1.6}
+                        x2={statusX - 1.6}
+                        y2={rowY + 1.6}
+                        stroke={COLORS.execFill}
+                        strokeWidth={1}
+                        strokeLinecap="round"
                       />
                     </g>
                   ) : null}
