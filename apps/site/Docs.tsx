@@ -13,6 +13,33 @@ type NavSection = {
   items: DocItem[]
 }
 
+const normalizeDocPath = (input: string): string => {
+  const parts = input.split('/').filter(Boolean)
+  const stack: string[] = []
+  for (const part of parts) {
+    if (part === '.' || part.length === 0) continue
+    if (part === '..') {
+      stack.pop()
+      continue
+    }
+    stack.push(part)
+  }
+  return stack.join('/')
+}
+
+const resolveDocPath = (currentDoc: string, target: string): string => {
+  if (target.startsWith('/')) {
+    return normalizeDocPath(target.slice(1))
+  }
+  if (target.startsWith('./') || target.startsWith('../')) {
+    const baseDir = currentDoc.includes('/')
+      ? currentDoc.slice(0, currentDoc.lastIndexOf('/') + 1)
+      : ''
+    return normalizeDocPath(`${baseDir}${target}`)
+  }
+  return normalizeDocPath(target)
+}
+
 const parseIndex = (markdown: string): NavSection[] => {
   const lines = markdown.split(/\r?\n/)
   const sections: NavSection[] = []
@@ -40,10 +67,12 @@ const parseIndex = (markdown: string): NavSection[] => {
 const Docs = () => {
   const params = useParams()
   const docs = useMemo(() => {
-    const entries = import.meta.glob('./generated/docs/*.md', { as: 'raw', eager: true })
+    const entries = import.meta.glob('./generated/docs/**/*.md', { as: 'raw', eager: true })
     const map = new Map<string, string>()
     for (const [path, content] of Object.entries(entries)) {
-      const file = path.split('/').pop()
+      const file = path
+        .replace(/^\.\/generated\/docs\//, '')
+        .replace(/^.*\/generated\/docs\//, '')
       if (file && typeof content === 'string') {
         map.set(file, content)
       }
@@ -62,7 +91,9 @@ const Docs = () => {
 
   const defaultDoc = 'README.md'
   const rawPath = params['*'] ? decodeURIComponent(params['*']) : defaultDoc
-  const normalizedPath = rawPath.endsWith('.md') ? rawPath : `${rawPath}.md`
+  const normalizedPath = normalizeDocPath(
+    rawPath.endsWith('.md') ? rawPath : `${rawPath}.md`
+  )
   const resolvedDoc = docs.has(normalizedPath) ? normalizedPath : defaultDoc
   const content = docs.get(resolvedDoc) ?? ''
 
@@ -88,7 +119,7 @@ const Docs = () => {
                     {section.items.map(item => (
                       <NavLink
                         key={item.path}
-                        to={`/docs/${encodeURIComponent(item.path)}`}
+                        to={`/docs/${encodeURI(item.path)}`}
                         style={{ textDecoration: 'none' }}
                       >
                         {({ isActive }) => (
@@ -188,7 +219,8 @@ const Docs = () => {
                     }
                     if (href.includes('.md')) {
                       const [file, hash] = href.split('#')
-                      const to = `/docs/${encodeURIComponent(file)}${hash ? `#${hash}` : ''}`
+                      const resolved = resolveDocPath(resolvedDoc, file)
+                      const to = `/docs/${encodeURI(resolved)}${hash ? `#${hash}` : ''}`
                       return (
                         <NavLink to={to} style={{ textDecoration: 'none' }}>
                           <Link color="gray.800">{children}</Link>
