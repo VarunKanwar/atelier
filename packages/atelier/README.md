@@ -131,7 +131,7 @@ const unsubscribe = runtime.subscribeEvents(event => {
 
 - Design notes: https://github.com/VarunKanwar/atelier/blob/main/docs/design/README.md
 - Observability model: https://github.com/VarunKanwar/atelier/blob/main/docs/design/observability.md
-- API reference (generated via TypeDoc and published at `/docs/` on the site)
+- API reference (curated and published at `/docs/` on the site)
 - Testing: https://github.com/VarunKanwar/atelier/blob/main/docs/testing.md
 - Demo site (scenarios and UI): https://github.com/VarunKanwar/atelier/tree/main/apps/site
 

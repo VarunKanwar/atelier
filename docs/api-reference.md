@@ -1,8 +1,5 @@
 # Atelier API Reference
 
-This reference documents the public API surface for Atelier. It is
-intentionally concise and reflects the current implementation.
-
 ## createTaskRuntime
 
 ```ts

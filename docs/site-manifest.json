@@ -1,0 +1,23 @@
+{
+  "intro": "Start with the guides and use the API reference when you need signatures or defaults.",
+  "sections": [
+    {
+      "title": "Guides",
+      "items": [
+        { "title": "Getting started", "path": "guides/getting-started.md" },
+        { "title": "Worker setup", "path": "guides/worker-setup.md" },
+        { "title": "Backpressure and queue states", "path": "guides/backpressure-and-queues.md" },
+        { "title": "Cancellation and timeouts", "path": "guides/cancellation-and-timeouts.md" },
+        { "title": "Crash recovery", "path": "guides/crash-recovery.md" },
+        { "title": "Transferables", "path": "guides/transferables.md" },
+        { "title": "Observability", "path": "guides/observability.md" }
+      ]
+    },
+    {
+      "title": "API",
+      "items": [
+        { "title": "Reference", "path": "api-reference.md" }
+      ]
+    }
+  ]
+}

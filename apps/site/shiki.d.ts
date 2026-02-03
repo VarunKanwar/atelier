@@ -6,6 +6,12 @@ declare module 'shiki/langs/typescript' {
   export default lang
 }
 
+declare module 'shiki/langs/bash' {
+  import type { LanguageRegistration } from 'shiki'
+  const lang: LanguageRegistration[]
+  export default lang
+}
+
 declare module 'shiki/themes/github-light' {
   import type { ThemeRegistration } from 'shiki'
   const theme: ThemeRegistration
