@@ -31,13 +31,11 @@ const resolveDocPath = (currentDoc: string, target: string): string => {
   if (target.startsWith('/')) {
     return normalizeDocPath(target.slice(1))
   }
+  const baseDir = currentDoc.includes('/') ? currentDoc.slice(0, currentDoc.lastIndexOf('/') + 1) : ''
   if (target.startsWith('./') || target.startsWith('../')) {
-    const baseDir = currentDoc.includes('/')
-      ? currentDoc.slice(0, currentDoc.lastIndexOf('/') + 1)
-      : ''
     return normalizeDocPath(`${baseDir}${target}`)
   }
-  return normalizeDocPath(target)
+  return normalizeDocPath(`${baseDir}${target}`)
 }
 
 const parseIndex = (markdown: string): NavSection[] => {
@@ -83,13 +81,11 @@ const Docs = () => {
   const indexContent = docs.get('README.md') ?? ''
   const sections = useMemo(() => {
     if (!indexContent) return []
-    return [
-      { title: 'Index', items: [{ title: 'Overview', path: 'README.md' }] },
-      ...parseIndex(indexContent),
-    ]
+    return parseIndex(indexContent)
   }, [indexContent])
 
-  const defaultDoc = 'README.md'
+  const preferredDefaults = ['guides/getting-started.md', 'api-reference.md', 'README.md']
+  const defaultDoc = preferredDefaults.find(path => docs.has(path)) ?? 'README.md'
   const rawPath = params['*'] ? decodeURIComponent(params['*']) : defaultDoc
   const normalizedPath = normalizeDocPath(
     rawPath.endsWith('.md') ? rawPath : `${rawPath}.md`
