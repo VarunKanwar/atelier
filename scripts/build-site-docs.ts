@@ -3,13 +3,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 type NavItem = { title: string; path: string }
+type ManifestSection = { title: string; items: NavItem[] }
+type Manifest = { intro?: string; sections: ManifestSection[] }
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..')
 const outputDir = path.join(repoRoot, 'apps/site/generated/docs')
 
-const guidesSrc = path.join(repoRoot, 'docs/guides')
-const apiRefSrc = path.join(repoRoot, 'docs/api-reference.md')
+const docsRoot = path.join(repoRoot, 'docs')
+const manifestPath = path.join(docsRoot, 'site-manifest.json')
 
 const exists = async (target: string): Promise<boolean> => {
   try {
@@ -24,102 +26,59 @@ const ensureDir = async (dir: string) => {
   await fs.mkdir(dir, { recursive: true })
 }
 
-const copyFileIfExists = async (src: string, dest: string) => {
-  if (!(await exists(src))) return
-  await ensureDir(path.dirname(dest))
-  await fs.copyFile(src, dest)
-}
-
-const copyMarkdownTree = async (
-  srcDir: string,
-  destDir: string,
-  options?: { skip?: (entryPath: string, entry: fs.Dirent) => boolean }
-) => {
-  if (!(await exists(srcDir))) return
-  const entries = await fs.readdir(srcDir, { withFileTypes: true })
-  for (const entry of entries) {
-    const src = path.join(srcDir, entry.name)
-    const dest = path.join(destDir, entry.name)
-    if (options?.skip?.(src, entry)) continue
-    if (entry.isDirectory()) {
-      await copyMarkdownTree(src, dest, options)
-      continue
-    }
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-    await ensureDir(destDir)
-    await fs.copyFile(src, dest)
+const readManifest = async (): Promise<Manifest> => {
+  const raw = await fs.readFile(manifestPath, 'utf8')
+  const data = JSON.parse(raw) as Manifest
+  if (!data.sections || !Array.isArray(data.sections)) {
+    throw new Error('site-manifest.json must include a sections array.')
   }
+  return data
 }
 
-const readFileIfExists = async (target: string): Promise<string> => {
-  try {
-    return await fs.readFile(target, 'utf8')
-  } catch {
-    return ''
+const normalizeManifestPath = (value: string): string => value.trim().replace(/^\.\//, '')
+
+const isLocalDocPath = (value: string): boolean => {
+  if (!value.endsWith('.md')) return false
+  if (/^[a-zA-Z]+:\/\//.test(value)) return false
+  if (value.startsWith('#')) return false
+  return true
+}
+
+const assertValidDocPath = (value: string): string => {
+  const normalized = normalizeManifestPath(value)
+  if (!isLocalDocPath(normalized)) {
+    throw new Error(`Invalid doc path in site-manifest.json: ${value}`)
   }
-}
-
-const parseMarkdownLinks = (markdown: string): NavItem[] => {
-  const items: NavItem[] = []
-  for (const raw of markdown.split(/\r?\n/)) {
-    const line = raw.trim()
-    const match = line.match(/^- \[([^\]]+)\]\(([^)]+)\)/)
-    if (!match) continue
-    const [, title, linkPath] = match
-    items.push({ title: title.trim(), path: linkPath.trim() })
+  const posix = path.posix.normalize(normalized)
+  if (path.posix.isAbsolute(posix) || posix.startsWith('..')) {
+    throw new Error(`Invalid doc path in site-manifest.json: ${value}`)
   }
-  return items
+  return posix
 }
-
-const isExternalLink = (linkPath: string): boolean => /^https?:\/\//.test(linkPath)
 
 const toNavLines = (items: NavItem[]): string[] =>
   items.map(item => `- [${item.title}](${item.path})`)
 
-const buildGuides = async (): Promise<NavItem[]> => {
-  const items: NavItem[] = []
-  const guidesReadme = path.join(guidesSrc, 'README.md')
-  if (await exists(guidesReadme)) {
-    const content = await readFileIfExists(guidesReadme)
-    const links = parseMarkdownLinks(content)
-    for (const link of links) {
-      if (isExternalLink(link.path)) continue
-      if (link.path.startsWith('#')) continue
-      if (link.path === 'README.md') continue
-      const normalized = link.path.replace(/^\.\//, '')
-      const pathWithPrefix = normalized.startsWith('guides/')
-        ? normalized
-        : `guides/${normalized}`
-      items.push({ title: link.title, path: pathWithPrefix })
-    }
+const copyDocFile = async (docPath: string) => {
+  const segments = docPath.split('/')
+  const src = path.join(docsRoot, ...segments)
+  const dest = path.join(outputDir, ...segments)
+  if (!(await exists(src))) {
+    throw new Error(`Missing doc referenced in site-manifest.json: ${docPath}`)
   }
-  return items
+  await ensureDir(path.dirname(dest))
+  await fs.copyFile(src, dest)
 }
 
-const buildReference = async (): Promise<NavItem[]> => {
-  const items: NavItem[] = []
-  if (await exists(apiRefSrc)) {
-    items.push({ title: 'API reference', path: 'api-reference.md' })
+const writeIndex = async (manifest: Manifest) => {
+  const lines: string[] = ['# Documentation', '']
+  if (manifest.intro) {
+    lines.push(manifest.intro, '')
   }
-  return items
-}
-
-const writeIndex = async () => {
-  const guides = await buildGuides()
-  const reference = await buildReference()
-  const lines: string[] = [
-    '# Documentation',
-    '',
-    'Start with the guides and use the API reference when you need signatures or defaults.',
-    '',
-  ]
-  if (guides.length > 0) {
-    lines.push('## Guides', ...toNavLines(guides), '')
+  for (const section of manifest.sections) {
+    if (!section.items || section.items.length === 0) continue
+    lines.push(`## ${section.title}`, ...toNavLines(section.items), '')
   }
-  if (reference.length > 0) {
-    lines.push('## Reference', ...toNavLines(reference), '')
-  }
-
   await ensureDir(outputDir)
   await fs.writeFile(path.join(outputDir, 'README.md'), lines.join('\n'))
 }
@@ -127,11 +86,19 @@ const writeIndex = async () => {
 const main = async () => {
   await fs.rm(outputDir, { recursive: true, force: true })
   await ensureDir(outputDir)
-  await copyMarkdownTree(guidesSrc, path.join(outputDir, 'guides'), {
-    skip: (_path, entry) => entry.isFile() && entry.name === 'README.md',
-  })
-  await copyFileIfExists(apiRefSrc, path.join(outputDir, 'api-reference.md'))
-  await writeIndex()
+  const manifest = await readManifest()
+  const seen = new Set<string>()
+  for (const section of manifest.sections) {
+    if (!section.items || !Array.isArray(section.items)) continue
+    for (const item of section.items) {
+      const docPath = assertValidDocPath(item.path)
+      item.path = docPath
+      if (seen.has(docPath)) continue
+      seen.add(docPath)
+      await copyDocFile(docPath)
+    }
+  }
+  await writeIndex(manifest)
 }
 
 main().catch(error => {
