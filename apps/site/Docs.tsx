@@ -150,7 +150,11 @@ const parseIndex = (markdown: string): NavSection[] => {
 const Docs = () => {
   const params = useParams()
   const docs = useMemo(() => {
-    const entries = import.meta.glob('./generated/docs/**/*.md', { as: 'raw', eager: true })
+    const entries = import.meta.glob('./generated/docs/**/*.md', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    })
     const map = new Map<string, string>()
     for (const [path, content] of Object.entries(entries)) {
       const file = path
