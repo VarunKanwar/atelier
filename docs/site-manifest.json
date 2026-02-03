@@ -14,9 +14,9 @@
       ]
     },
     {
-      "title": "Reference",
+      "title": "API",
       "items": [
-        { "title": "API reference", "path": "api-reference.md" }
+        { "title": "Reference", "path": "api-reference.md" }
       ]
     }
   ]
