@@ -2,17 +2,20 @@ import { Box } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import {
-  CANCEL_ANIMATION_MS,
-  type InFlightItem,
   QUEUE_ENTRY_X,
   QUEUE_MOVE_MS,
   QUEUE_SLOTS,
+  WORKER_BOX_SIZE,
+  WORKER_X,
+} from './common/queueLayout'
+import {
+  CANCEL_ANIMATION_MS,
+  type InFlightItem,
   type QueuedItem,
   type Shape,
   STATIC_IN_FLIGHT,
   STATIC_QUEUE,
   useCancellationAnimation,
-  WORKER_X,
 } from './hooks/useCancellationAnimation'
 
 // -----------------------------------------------------------------------------
@@ -21,7 +24,12 @@ import {
 
 const VIEWBOX = { width: 320, height: 80 }
 const SHAPE_SIZE = 6
-const WORKER_BOX = { x: 184, y: 24, width: 80, height: 32 }
+const WORKER_BOX = {
+  x: WORKER_X - WORKER_BOX_SIZE.width / 2,
+  y: 24,
+  width: WORKER_BOX_SIZE.width,
+  height: WORKER_BOX_SIZE.height,
+}
 const CENTER_Y = 40
 const CANCEL_ANIMATION_S = CANCEL_ANIMATION_MS / 1000
 const QUEUE_MOVE_S = QUEUE_MOVE_MS / 1000
