@@ -3,6 +3,10 @@
 These guides focus on using Atelier in real apps. They are intentionally
 practical and assume you already know basic Web Worker concepts.
 
+If you need a refresher on Web Workers:
+- [MDN: Using Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers)
+- [MDN: Web Workers API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API)
+
 ## Index
 - [Getting started](getting-started.md) - Create a runtime, define a task, and call it.
 - [Worker setup](worker-setup.md) - Implement worker handlers and cancellation wiring.
