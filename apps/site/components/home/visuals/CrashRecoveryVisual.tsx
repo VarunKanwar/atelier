@@ -52,6 +52,7 @@ function FragmentScatter({ stroke }: { stroke: string }) {
     <g>
       {FRAGMENTS.map((fragment, index) => (
         <motion.g
+          // biome-ignore lint/suspicious/noArrayIndexKey: static fragment array, never reordered
           key={index}
           initial={{ x: 0, y: 0, opacity: 0.9, scale: 1, rotate: 0 }}
           animate={{
@@ -207,13 +208,7 @@ function ShapeFillFrozen({ item, progress }: { item: CrashItem; progress: number
   )
 }
 
-function QueueItemElement({
-  item,
-  slotIndex,
-}: {
-  item: CrashItem
-  slotIndex: number
-}) {
+function QueueItemElement({ item, slotIndex }: { item: CrashItem; slotIndex: number }) {
   const x = QUEUE_SLOTS[slotIndex] ?? QUEUE_SLOTS[QUEUE_SLOTS.length - 1]
   const entryY =
     item.entryFromWorker !== undefined
@@ -383,7 +378,8 @@ export default function CrashRecoveryVisual() {
         {WORKER_Y_POSITIONS.map((workerY, index) => {
           const worker: WorkerSlot | undefined = workers[index]
           return (
-            <g key={`worker-${index}`}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: static array of worker positions, never reordered
+            <g key={index}>
               <WorkerContainer y={workerY} isFailing={failingWorkerId === index} />
               <AnimatePresence>
                 {worker?.item ? (

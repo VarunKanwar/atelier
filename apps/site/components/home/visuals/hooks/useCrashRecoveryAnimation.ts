@@ -434,17 +434,14 @@ export function useCrashRecoveryAnimation(
     }
   }, [])
 
-  const step = useCallback(
-    (now: number) => {
-      const next = tick({ state: stateRef.current, now })
-      if (next !== stateRef.current) {
-        stateRef.current = next
-        setState(next)
-      }
-      return next
-    },
-    [setState]
-  )
+  const step = useCallback((now: number) => {
+    const next = tick({ state: stateRef.current, now })
+    if (next !== stateRef.current) {
+      stateRef.current = next
+      setState(next)
+    }
+    return next
+  }, [])
 
   const scheduleNext = useCallback(
     (now: number, nextState: TickState) => {

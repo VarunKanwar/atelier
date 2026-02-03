@@ -142,6 +142,7 @@ function FragmentScatter({ stroke }: { stroke: string }) {
     <g>
       {FRAGMENTS.map((fragment, index) => (
         <motion.g
+          // biome-ignore lint/suspicious/noArrayIndexKey: static fragment array, never reordered
           key={index}
           initial={{ x: 0, y: 0, opacity: 0.9, scale: 1, rotate: 0 }}
           animate={{

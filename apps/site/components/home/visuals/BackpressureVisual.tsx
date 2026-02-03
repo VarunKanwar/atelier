@@ -59,7 +59,6 @@ function ParticleElement({ particle, height }: { particle: Particle; height: num
 }
 
 const Lens = ({ fillId, highlightId }: { fillId: string; highlightId: string }) => {
-  const { width } = PARTICLE_FLOW_DIMENSIONS
   const { conduitStart, conduitEnd } = PARTICLE_FLOW_ZONES
   const { centerY, conduitHalfHeight } = PARTICLE_FLOW_GEOMETRY
   const lensPadding = conduitHalfHeight * 0.3

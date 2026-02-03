@@ -147,9 +147,7 @@ export default function DefineDispatchVisual() {
   const galleryLabelCount = Math.min(labelCompletedCount, galleryThumbCount)
 
   const {
-    preprocessQueue,
     inferQueue,
-    thumbQueue,
     preprocessActive,
     thumbActive,
     inferenceActive,
