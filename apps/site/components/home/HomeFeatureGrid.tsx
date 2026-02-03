@@ -1,7 +1,12 @@
 import { Box, SimpleGrid, Stack, Tabs, Text } from '@chakra-ui/react'
+import { useEffect, useState } from 'react'
 import { createBundledHighlighter, createSingletonShorthands } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
-import { useEffect, useState } from 'react'
+import BackpressureVisual from './visuals/BackpressureVisual'
+import CancellationVisual from './visuals/CancellationVisual'
+import DefineDispatchVisual from './visuals/DefineDispatchVisual'
+import CrashRecoveryVisual from './visuals/CrashRecoveryVisual'
+import ObservabilityVisual from './visuals/ObservabilityVisual'
 
 const createHighlighter = createBundledHighlighter({
   langs: {
@@ -135,94 +140,6 @@ const CodeTabs = () => (
   </Tabs.Root>
 )
 
-const PipelinePlaceholder = () => (
-  <Box
-    h="100%"
-    minH="300px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Stack align="center" gap={2}>
-      <Text fontSize="sm" color="gray.500">
-        preprocess -{'>'} classify (singleton)
-      </Text>
-      <Text fontSize="sm" color="gray.500">
-        -{'>'} thumbnail (pool)
-      </Text>
-      <Text fontSize="xs" color="gray.400" mt={2}>
-        [Pipeline animation]
-      </Text>
-    </Stack>
-  </Box>
-)
-
-const BackpressurePlaceholder = () => (
-  <Box
-    h="100%"
-    minH="200px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Text fontSize="xs" color="gray.400">
-      [Backpressure animation]
-    </Text>
-  </Box>
-)
-
-const CancellationPlaceholder = () => (
-  <Box
-    h="100%"
-    minH="200px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Text fontSize="xs" color="gray.400">
-      [Cancellation animation]
-    </Text>
-  </Box>
-)
-
-const CrashRecoveryPlaceholder = () => (
-  <Box
-    h="100%"
-    minH="200px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Text fontSize="xs" color="gray.400">
-      [Crash recovery animation]
-    </Text>
-  </Box>
-)
-
-const ObservabilityPlaceholder = () => (
-  <Box
-    h="100%"
-    minH="200px"
-    bg="var(--surface-muted)"
-    rounded="lg"
-    display="flex"
-    alignItems="center"
-    justifyContent="center"
-  >
-    <Text fontSize="xs" color="gray.400">
-      [Observability animation]
-    </Text>
-  </Box>
-)
-
 const FeatureCell = ({
   children,
   borderLeft = false,
@@ -250,12 +167,12 @@ const HomeFeatureGrid = () => {
           <FeatureCell>
             <Stack gap={4}>
               <Stack gap={1}>
-                  <Text fontSize="xl" fontWeight="semibold" color="gray.900">
-                    Define and Dispatch
-                  </Text>
-                  <Text fontSize="sm" color="gray.600">
-                    Define tasks once and call them like local methods.
-                  </Text>
+                <Text fontSize="xl" fontWeight="semibold" color="gray.900">
+                  Define and Dispatch
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  Define tasks once and call them like local methods.
+                </Text>
               </Stack>
               <Box pt={2}>
                 <CodeTabs />
@@ -263,7 +180,7 @@ const HomeFeatureGrid = () => {
             </Stack>
           </FeatureCell>
           <FeatureCell borderLeft>
-            <PipelinePlaceholder />
+            <DefineDispatchVisual />
           </FeatureCell>
         </SimpleGrid>
       </Box>
@@ -278,11 +195,12 @@ const HomeFeatureGrid = () => {
                     Predictable Backpressure
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Decide whether to block, reject, or shed load when saturated.
+                    Control pipeline concurrency, and decide whether to block, reject, or shed load
+                    when tasks are saturated.
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <BackpressurePlaceholder />
+                  <BackpressureVisual />
                 </Box>
               </Stack>
             </FeatureCell>
@@ -290,14 +208,14 @@ const HomeFeatureGrid = () => {
               <Stack gap={4}>
                 <Stack gap={1}>
                   <Text fontSize="xl" fontWeight="semibold" color="gray.900">
-                    Keyed Cancellation
+                    Flexible Cancellation
                   </Text>
                   <Text fontSize="sm" color="gray.600">
-                    Cancel whole job groups across queued and in-flight work.
+                    Cancel a job group by key across waiting, queued, and in‑flight work.
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <CancellationPlaceholder />
+                  <CancellationVisual />
                 </Box>
               </Stack>
             </FeatureCell>
@@ -319,7 +237,7 @@ const HomeFeatureGrid = () => {
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <CrashRecoveryPlaceholder />
+                  <CrashRecoveryVisual />
                 </Box>
               </Stack>
             </FeatureCell>
@@ -334,7 +252,7 @@ const HomeFeatureGrid = () => {
                   </Text>
                 </Stack>
                 <Box pt={2}>
-                  <ObservabilityPlaceholder />
+                  <ObservabilityVisual />
                 </Box>
               </Stack>
             </FeatureCell>
