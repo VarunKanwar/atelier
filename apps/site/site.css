@@ -41,6 +41,135 @@ a {
   color: inherit;
 }
 
+/* Docs page */
+.docs-content {
+  color: #374151;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.docs-content h1,
+.docs-content h2,
+.docs-content h3,
+.docs-content h4 {
+  color: #111827;
+}
+
+.docs-content h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+}
+
+@media (min-width: 48em) {
+  .docs-content h1 {
+    font-size: 2.25rem;
+  }
+}
+
+.docs-content h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 32px 0 12px;
+}
+
+.docs-content h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+
+.docs-content p {
+  margin: 0 0 16px;
+}
+
+.docs-content ul,
+.docs-content ol {
+  margin: 0 0 20px 20px;
+  padding: 0;
+}
+
+.docs-content li {
+  margin-bottom: 8px;
+}
+
+.docs-content a {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.docs-content a:hover {
+  color: var(--accent-strong);
+}
+
+.docs-nav-link {
+  display: block;
+}
+
+.docs-nav-link-active {
+  font-weight: 600;
+  color: #111827;
+}
+
+.docs-content code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-muted);
+  border-radius: 4px;
+  padding: 0.15rem 0.3rem;
+}
+
+.docs-content pre {
+  background: var(--surface-muted);
+  border-radius: 10px;
+  padding: 16px 20px;
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  line-height: 1.65;
+  overflow-x: auto;
+  margin: 0 0 24px;
+}
+
+.docs-content pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.docs-content hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 32px 0;
+}
+
+.docs-content blockquote {
+  margin: 0 0 16px;
+  padding-left: 16px;
+  border-left: 2px solid var(--border-subtle);
+  color: #4b5563;
+}
+
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 24px;
+  font-size: 0.95rem;
+}
+
+.docs-content th,
+.docs-content td {
+  text-align: left;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.docs-content thead th {
+  font-weight: 600;
+  color: #1f2937;
+}
+
 .home-codeblock pre {
   margin: 0;
   padding: 0;
