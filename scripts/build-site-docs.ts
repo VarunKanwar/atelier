@@ -133,30 +133,7 @@ const buildExplanation = async (): Promise<NavItem[]> => {
 const buildReference = async (): Promise<NavItem[]> => {
   const items: NavItem[] = []
   if (await exists(apiRefSrc)) {
-    items.push({ title: 'API reference (overview)', path: 'api-reference.md' })
-  }
-  const candidates = ['modules.md', 'index.md', 'globals.md']
-  let generatedEntry: string | null = null
-  for (const candidate of candidates) {
-    if (await exists(path.join(outputDir, candidate))) {
-      generatedEntry = candidate
-      break
-    }
-  }
-  if (!generatedEntry && (await exists(outputDir))) {
-    const entries = await fs.readdir(outputDir, { withFileTypes: true })
-    const ignored = new Set(['README.md', 'api-reference.md', 'testing.md'])
-    const markdownFiles = entries
-      .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
-      .map(entry => entry.name)
-      .filter(name => !ignored.has(name))
-      .sort()
-    if (markdownFiles.length > 0) {
-      generatedEntry = markdownFiles[0]
-    }
-  }
-  if (generatedEntry) {
-    items.push({ title: 'API reference (generated)', path: generatedEntry })
+    items.push({ title: 'API reference', path: 'api-reference.md' })
   }
   return items
 }
@@ -187,6 +164,7 @@ const writeIndex = async () => {
 }
 
 const main = async () => {
+  await fs.rm(outputDir, { recursive: true, force: true })
   await ensureDir(outputDir)
   await copyMarkdownTree(guidesSrc, path.join(outputDir, 'guides'))
   await copyMarkdownTree(designSrc, path.join(outputDir, 'design'))

@@ -1,9 +1,5 @@
 {
   "name": "atelier-workspace",
-  "devDependencies": {
-    "typedoc": "^0.28.16",
-    "typedoc-plugin-markdown": "^4.9.0"
-  },
   "private": true,
   "scripts": {
     "lint": "bun run --workspaces --if-present --silent lint",
@@ -15,7 +11,7 @@
     "typecheck": "bun run --workspaces --if-present --silent typecheck",
     "test": "bun run --workspaces --if-present --silent test",
     "build": "bun run --workspaces --if-present --silent build",
-    "docs:site": "bun run --cwd packages/atelier docs:api && bun run ./scripts/build-site-docs.ts",
+    "docs:site": "bun run ./scripts/build-site-docs.ts",
     "site:dev": "bun run docs:site && bun run --cwd apps/site dev",
     "site:build": "bun run docs:site && bun run --cwd apps/site build",
     "site:preview": "bun run --cwd apps/site preview"
