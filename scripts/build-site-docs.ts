@@ -68,6 +68,8 @@ const parseMarkdownLinks = (markdown: string): NavItem[] => {
   return items
 }
 
+const isExternalLink = (linkPath: string): boolean => /^https?:\/\//.test(linkPath)
+
 const parseDesignIndex = (markdown: string): string[] => {
   const files: string[] = []
   for (const raw of markdown.split(/\r?\n/)) {
@@ -100,6 +102,8 @@ const buildGuides = async (): Promise<NavItem[]> => {
     const content = await readFileIfExists(guidesReadme)
     const links = parseMarkdownLinks(content)
     for (const link of links) {
+      if (isExternalLink(link.path)) continue
+      if (link.path.startsWith('#')) continue
       const normalized = link.path.replace(/^\.\//, '')
       const pathWithPrefix = normalized.startsWith('guides/')
         ? normalized
