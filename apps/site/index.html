@@ -11,16 +11,14 @@
       rel="stylesheet"
     />
     <script>
-      ;(function (l) {
+      ;((l) => {
         if (l.search[1] === '/') {
-          var decoded = l.search
+          const decoded = l.search
             .slice(1)
             .split('&')
-            .map(function (s) {
-              return s.replace(/~and~/g, '&')
-            })
+            .map((s) => s.replace(/~and~/g, '&'))
             .join('&')
-          var base = l.pathname.replace(/\/$/, '')
+          const base = l.pathname.replace(/\/$/, '')
           window.history.replaceState(null, '', base + decoded + l.hash)
         }
       })(window.location)
