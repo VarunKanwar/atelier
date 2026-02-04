@@ -2,6 +2,7 @@
   "name": "atelier-workspace",
   "private": true,
   "scripts": {
+    "prepare": "bash scripts/setup-githooks.sh",
     "lint": "bun run --workspaces --if-present --silent lint",
     "lint:fix": "bun run --workspaces --if-present --silent lint:fix",
     "format": "bun run --workspaces --if-present --silent format",
