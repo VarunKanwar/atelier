@@ -189,65 +189,76 @@ const Docs = () => {
           maxW="var(--content-max-width)"
           mx="auto"
           px={{ base: 5, md: 8 }}
-          py={{ base: 10, md: 12 }}
         >
           <Stack
-            gap={{ base: 8, lg: 12 }}
+            gap={{ base: 8, lg: 0 }}
             direction={{ base: 'column', lg: 'row' }}
             align={{ base: 'start', lg: 'stretch' }}
-            minH={{ base: 'calc(100vh - 80px)', md: 'calc(100vh - 96px)' }}
+            minH="100vh"
           >
             <Box
               w={{ base: 'full', lg: '240px' }}
               pr={{ base: 0, lg: 6 }}
               borderRightWidth={{ base: '0', lg: '1px' }}
               borderColor="var(--border-subtle)"
-              position={{ lg: 'sticky' }}
-              top={{ lg: '96px' }}
+              alignSelf="stretch"
             >
-              <Stack gap={7} fontSize="sm" py={{ base: 0, lg: 2 }}>
-                {sections.map(section => (
-                  <Stack key={section.title} gap={3}>
-                    <Text
-                      fontSize="xs"
-                      fontWeight="semibold"
-                      textTransform="uppercase"
-                      letterSpacing="0.08em"
-                      color="gray.500"
-                    >
-                      {section.title}
-                    </Text>
-                    <Stack gap={2} color="gray.600">
-                    {section.items.map(item => {
-                      const navPath = normalizeDocPath(item.path)
-                      const isActive = resolvedDoc === navPath
-                      return (
-                        <ChakraLink
-                          key={item.path}
-                          as={RouterLink}
-                          to={`/docs/${encodeURI(navPath)}`}
-                          className={`docs-nav-link${isActive ? ' docs-nav-link-active' : ''}`}
-                          aria-current={isActive ? 'page' : undefined}
-                          fontSize="sm"
-                          fontWeight={isActive ? 'semibold' : 'normal'}
-                          color={isActive ? 'gray.900' : 'gray.600'}
-                          textDecoration="none"
-                          lineHeight="1.6"
-                          _hover={{ color: 'gray.900', textDecoration: 'none' }}
-                          _focusVisible={{ outline: 'none', boxShadow: 'none' }}
-                          _focus={{ outline: 'none', boxShadow: 'none' }}
-                        >
-                          {item.title}
-                        </ChakraLink>
-                      )
-                    })}
+              <Box
+                position={{ lg: 'sticky' }}
+                top={{ lg: '96px' }}
+                pt={{ base: 8, md: 10 }}
+                pb={{ base: 8, md: 10 }}
+              >
+                <Stack gap={7} fontSize="sm">
+                  {sections.map(section => (
+                    <Stack key={section.title} gap={3}>
+                      <Text
+                        fontSize="xs"
+                        fontWeight="semibold"
+                        textTransform="uppercase"
+                        letterSpacing="0.08em"
+                        color="gray.500"
+                      >
+                        {section.title}
+                      </Text>
+                      <Stack gap={2} color="gray.600">
+                        {section.items.map(item => {
+                          const navPath = normalizeDocPath(item.path)
+                          const isActive = resolvedDoc === navPath
+                          return (
+                            <ChakraLink
+                              key={item.path}
+                              as={RouterLink}
+                              to={`/docs/${encodeURI(navPath)}`}
+                              className={`docs-nav-link${isActive ? ' docs-nav-link-active' : ''}`}
+                              aria-current={isActive ? 'page' : undefined}
+                              fontSize="sm"
+                              fontWeight={isActive ? 'semibold' : 'normal'}
+                              color={isActive ? 'gray.900' : 'gray.600'}
+                              textDecoration="none"
+                              lineHeight="1.6"
+                              _hover={{ color: 'gray.900', textDecoration: 'none' }}
+                              _focusVisible={{ outline: 'none', boxShadow: 'none' }}
+                              _focus={{ outline: 'none', boxShadow: 'none' }}
+                            >
+                              {item.title}
+                            </ChakraLink>
+                          )
+                        })}
+                      </Stack>
                     </Stack>
-                  </Stack>
-                ))}
-              </Stack>
+                  ))}
+                </Stack>
+              </Box>
             </Box>
 
-            <Box flex="1" minW={0} pt={{ base: 2, md: 4 }}>
+            <Box
+              flex="1"
+              minW={0}
+              pl={{ base: 0, lg: 6 }}
+              pt={{ base: 8, md: 10 }}
+              pb={{ base: 10, md: 12 }}
+            >
               {content ? (
                 <Box className="docs-content">
                   <ReactMarkdown
