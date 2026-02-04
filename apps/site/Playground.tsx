@@ -246,60 +246,80 @@ const Playground = () => {
   )
 
   return (
-    <Box minH="100vh" bgGradient="linear(to-b, gray.50, gray.100)" px={{ base: 4, lg: 6 }} py={5}>
-      <Box maxW="1600px" mx="auto">
-        <Stack gap={5}>
-          <PlaygroundTabs value={activeTab} onChange={handleTabChange} />
+    <Box minH="100vh" bg="var(--page-bg)">
+      <Box borderTopWidth="1px" borderColor="var(--border-subtle)">
+        <Box borderBottomWidth="1px" borderColor="var(--border-subtle)">
+          <Box maxW="1600px" mx="auto" px={{ base: 5, md: 8 }} pt={{ base: 8, md: 10 }}>
+            <PlaygroundTabs value={activeTab} onChange={handleTabChange} />
+          </Box>
+        </Box>
 
-          {activeTab === 'overview' ? (
-            <OverviewContent />
-          ) : (
-            <SimpleGrid columns={{ base: 1, lg: 12 }} gap={5} alignItems="start">
-              <Box
-                gridColumn={{ base: 'span 1', lg: 'span 3' }}
-                bg="white"
-                borderWidth="1px"
-                borderColor="gray.200"
-                rounded="lg"
-                overflow="hidden"
-              >
-                <PlaygroundControls
-                  activeTab={activeTab}
-                  expandedSections={expandedSections}
-                  runStatus={runStatus}
-                  imageCount={imageCount}
-                  limitConcurrency={limitConcurrency}
-                  maxConcurrent={maxConcurrent}
-                  limitQueueDepth={limitQueueDepth}
-                  maxQueueDepth={maxQueueDepth}
-                  queuePolicy={queuePolicy}
-                  crashPolicy={crashPolicy}
-                  crashArmed={crashArmed}
-                  runKey={runKeyRef.current}
-                  onImageCountChange={setImageCount}
-                  onLimitConcurrencyChange={setLimitConcurrency}
-                  onMaxConcurrentChange={setMaxConcurrent}
-                  onLimitQueueDepthChange={setLimitQueueDepth}
-                  onMaxQueueDepthChange={setMaxQueueDepth}
-                  onQueuePolicyChange={setQueuePolicy}
-                  onCrashPolicyChange={setCrashPolicy}
-                  onCrashNext={handleCrashNext}
-                  onToggleSection={toggleSection}
-                  onResetThroughput={resetThroughput}
-                  onResetBackpressure={resetBackpressure}
-                  onResetCrashes={resetCrashes}
-                  onRun={handleRun}
-                  onAbort={handleAbort}
-                  onReset={handleReset}
-                />
+        <Box maxW="1600px" mx="auto" px={{ base: 5, md: 8 }} pb={{ base: 8, md: 10 }}>
+          <Stack gap={0} minH={{ base: 'calc(100vh - 64px)', md: 'calc(100vh - 80px)' }}>
+            {activeTab === 'overview' ? (
+              <Box pt={{ base: 6, md: 8 }}>
+                <OverviewContent />
               </Box>
-              <Stack gridColumn={{ base: 'span 1', lg: 'span 9' }} gap={3}>
-                <RuntimeSnapshotPanel runtime={runtime} onlyOnChange graph={graph} />
-                {status}
-              </Stack>
-            </SimpleGrid>
-          )}
-        </Stack>
+            ) : (
+              <SimpleGrid
+                flex="1"
+                columns={{ base: 1, lg: 12 }}
+                gap={{ base: 8, lg: 0 }}
+                alignItems="stretch"
+              >
+                <Box
+                  gridColumn={{ base: 'span 1', lg: 'span 3' }}
+                  pt={{ base: 6, md: 8 }}
+                  pb={{ base: 8, md: 10 }}
+                  pr={{ base: 0, lg: 8 }}
+                >
+                  <PlaygroundControls
+                    activeTab={activeTab}
+                    expandedSections={expandedSections}
+                    runStatus={runStatus}
+                    imageCount={imageCount}
+                    limitConcurrency={limitConcurrency}
+                    maxConcurrent={maxConcurrent}
+                    limitQueueDepth={limitQueueDepth}
+                    maxQueueDepth={maxQueueDepth}
+                    queuePolicy={queuePolicy}
+                    crashPolicy={crashPolicy}
+                    crashArmed={crashArmed}
+                    runKey={runKeyRef.current}
+                    onImageCountChange={setImageCount}
+                    onLimitConcurrencyChange={setLimitConcurrency}
+                    onMaxConcurrentChange={setMaxConcurrent}
+                    onLimitQueueDepthChange={setLimitQueueDepth}
+                    onMaxQueueDepthChange={setMaxQueueDepth}
+                    onQueuePolicyChange={setQueuePolicy}
+                    onCrashPolicyChange={setCrashPolicy}
+                    onCrashNext={handleCrashNext}
+                    onToggleSection={toggleSection}
+                    onResetThroughput={resetThroughput}
+                    onResetBackpressure={resetBackpressure}
+                    onResetCrashes={resetCrashes}
+                    onRun={handleRun}
+                    onAbort={handleAbort}
+                    onReset={handleReset}
+                  />
+                </Box>
+                <Stack
+                  gridColumn={{ base: 'span 1', lg: 'span 9' }}
+                  gap={4}
+                  borderLeftWidth={{ base: '0', lg: '1px' }}
+                  borderColor="var(--border-subtle)"
+                  pl={{ base: 0, lg: 8 }}
+                  pt={{ base: 6, md: 8 }}
+                  pb={{ base: 8, md: 10 }}
+                  minH="full"
+                >
+                  <RuntimeSnapshotPanel runtime={runtime} onlyOnChange graph={graph} />
+                  {status}
+                </Stack>
+              </SimpleGrid>
+            )}
+          </Stack>
+        </Box>
       </Box>
     </Box>
   )
