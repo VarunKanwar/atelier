@@ -1,5 +1,5 @@
 import { Box, HStack, Text } from '@chakra-ui/react'
-import { NavLink } from 'react-router-dom'
+import { Link as RouterLink, NavLink } from 'react-router-dom'
 
 const NavTab = ({ label, to, end }: { label: string; to: string; end?: boolean }) => {
   return (
@@ -28,13 +28,22 @@ const SiteHeader = () => {
     <Box bg="white" borderBottomWidth="1px" borderColor="gray.200">
       <Box maxW="var(--content-max-width)" mx="auto" px={{ base: 5, md: 8 }} py={3}>
         <HStack justify="space-between" align="center" flexWrap="wrap" gap={4}>
-          <Text fontWeight="bold" fontSize="lg" letterSpacing="-0.01em">
+          <Text
+            as={RouterLink}
+            to="/"
+            fontWeight="bold"
+            fontSize="lg"
+            letterSpacing="-0.01em"
+            textDecoration="none"
+            color="gray.900"
+            _hover={{ textDecoration: 'none', color: 'gray.900' }}
+          >
             Atelier
           </Text>
           <HStack gap={5}>
             <NavTab label="Home" to="/" end />
-            <NavTab label="Explore" to="/explore" />
             <NavTab label="Docs" to="/docs" />
+            <NavTab label="Playground" to="/playground" />
           </HStack>
         </HStack>
       </Box>

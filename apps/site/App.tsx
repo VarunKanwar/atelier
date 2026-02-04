@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import SiteLayout from './components/layout/SiteLayout'
 import Docs from './Docs'
 import Home from './Home'
@@ -13,7 +13,8 @@ const App = () => {
       <Routes>
         <Route element={<SiteLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/explore" element={<Playground />} />
+          <Route path="/explore" element={<Navigate to="/playground" replace />} />
+          <Route path="/playground" element={<Playground />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/docs/*" element={<Docs />} />
         </Route>

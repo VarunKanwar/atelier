@@ -4,12 +4,12 @@ import HomeHero from './components/home/HomeHero'
 
 const Home = () => {
   const docsHref = '/docs'
-  const exploreHref = '/explore'
+  const playgroundHref = '/playground'
   const githubHref = 'https://github.com/VarunKanwar/atelier'
 
   return (
     <Box minH="100vh">
-      <HomeHero docsHref={docsHref} exploreHref={exploreHref} githubHref={githubHref} />
+      <HomeHero docsHref={docsHref} playgroundHref={playgroundHref} githubHref={githubHref} />
       <HomeFeatureGrid />
     </Box>
   )
