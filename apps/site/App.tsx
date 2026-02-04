@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import SiteLayout from './components/layout/SiteLayout'
 import Docs from './Docs'
 import Home from './Home'
-import Playground from './Playground'
+import Playground from './PlaygroundPage'
 
 const App = () => {
   const base = import.meta.env.BASE_URL ?? '/'
