@@ -150,6 +150,7 @@ interface TickParams {
   now: number
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Animation tick is intentionally stateful.
 function tick({ state, now }: TickParams): TickState {
   let {
     queue,
