@@ -67,15 +67,12 @@ export const CANCEL_ANIMATION_MS = 700
 const POST_CANCEL_PAUSE_MS = 500
 const MAX_QUEUE_SIZE = 4
 export const QUEUE_SHIFT_DELAY_MS = 100
-export const QUEUE_MOVE_MS = 100
-export const QUEUE_ENTRY_X = 0
 const QUEUE_SPAWN_DELAY_MS = 100
 
 // Queue slot x positions (fixed)
 // Index 0 = front of queue (closest to worker), Index 3 = back (furthest)
 // Items move RIGHT toward worker as they advance
-export const QUEUE_SLOTS = [128, 96, 64, 32] // front → back
-export const WORKER_X = 224
+// (sourced from shared layout constants)
 
 // Timing ranges (ms)
 const COMMAND_INTERVAL: [number, number] = [2000, 6000]
