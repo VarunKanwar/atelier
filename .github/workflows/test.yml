@@ -23,10 +23,13 @@ jobs:
         run: bun install
 
       - name: Run lint check
-        run: bun --cwd packages/atelier run check
+        run: bun run lint
+
+      - name: Run format check
+        run: bun run format
 
       - name: Run type check
-        run: bun --cwd packages/atelier run typecheck
+        run: bun run typecheck
 
       - name: Run tests
-        run: bun --cwd packages/atelier run test
+        run: bun run test
