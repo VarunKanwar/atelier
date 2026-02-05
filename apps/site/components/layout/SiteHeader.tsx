@@ -1,4 +1,4 @@
-import { Box, HStack, Text } from '@chakra-ui/react'
+import { Box, HStack, Link } from '@chakra-ui/react'
 import { Link as RouterLink, NavLink } from 'react-router-dom'
 
 const NavTab = ({ label, to, end }: { label: string; to: string; end?: boolean }) => {
@@ -28,9 +28,8 @@ const SiteHeader = () => {
     <Box bg="white" borderBottomWidth="1px" borderColor="gray.200">
       <Box maxW="var(--content-max-width)" mx="auto" px={{ base: 5, md: 8 }} py={3}>
         <HStack justify="space-between" align="center" flexWrap="wrap" gap={4}>
-          <Text
-            as={RouterLink}
-            to="/"
+          <Link
+            asChild
             fontWeight="bold"
             fontSize="lg"
             letterSpacing="-0.01em"
@@ -38,8 +37,8 @@ const SiteHeader = () => {
             color="gray.900"
             _hover={{ textDecoration: 'none', color: 'gray.900' }}
           >
-            Atelier
-          </Text>
+            <RouterLink to="/">Atelier</RouterLink>
+          </Link>
           <HStack gap={5}>
             <NavTab label="Home" to="/" end />
             <NavTab label="Docs" to="/docs" />

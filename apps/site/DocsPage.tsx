@@ -116,7 +116,9 @@ const resolveDocPath = (currentDoc: string, target: string): string => {
   if (target.startsWith('/')) {
     return normalizeDocPath(target.slice(1))
   }
-  const baseDir = currentDoc.includes('/') ? currentDoc.slice(0, currentDoc.lastIndexOf('/') + 1) : ''
+  const baseDir = currentDoc.includes('/')
+    ? currentDoc.slice(0, currentDoc.lastIndexOf('/') + 1)
+    : ''
   if (target.startsWith('./') || target.startsWith('../')) {
     return normalizeDocPath(`${baseDir}${target}`)
   }
@@ -157,9 +159,7 @@ const Docs = () => {
     })
     const map = new Map<string, string>()
     for (const [path, content] of Object.entries(entries)) {
-      const file = path
-        .replace(/^\.\/generated\/docs\//, '')
-        .replace(/^.*\/generated\/docs\//, '')
+      const file = path.replace(/^\.\/generated\/docs\//, '').replace(/^.*\/generated\/docs\//, '')
       if (file && typeof content === 'string') {
         map.set(file, content)
       }
@@ -176,20 +176,14 @@ const Docs = () => {
   const preferredDefaults = ['guides/getting-started.md', 'api-reference.md', 'README.md']
   const defaultDoc = preferredDefaults.find(path => docs.has(path)) ?? 'README.md'
   const rawPath = params['*'] ? decodeURIComponent(params['*']) : defaultDoc
-  const normalizedPath = normalizeDocPath(
-    rawPath.endsWith('.md') ? rawPath : `${rawPath}.md`
-  )
+  const normalizedPath = normalizeDocPath(rawPath.endsWith('.md') ? rawPath : `${rawPath}.md`)
   const resolvedDoc = docs.has(normalizedPath) ? normalizedPath : defaultDoc
   const content = docs.get(resolvedDoc) ?? ''
 
   return (
     <Box bg="var(--page-bg)" minH="100vh">
       <Box borderTopWidth="1px" borderColor="var(--border-subtle)">
-        <Box
-          maxW="var(--content-max-width)"
-          mx="auto"
-          px={{ base: 5, md: 8 }}
-        >
+        <Box maxW="var(--content-max-width)" mx="auto" px={{ base: 5, md: 8 }}>
           <Stack
             gap={{ base: 8, lg: 0 }}
             direction={{ base: 'column', lg: 'row' }}
@@ -227,9 +221,8 @@ const Docs = () => {
                           const isActive = resolvedDoc === navPath
                           return (
                             <ChakraLink
+                              asChild
                               key={item.path}
-                              as={RouterLink}
-                              to={`/docs/${encodeURI(navPath)}`}
                               className={`docs-nav-link${isActive ? ' docs-nav-link-active' : ''}`}
                               aria-current={isActive ? 'page' : undefined}
                               fontSize="sm"
@@ -241,7 +234,9 @@ const Docs = () => {
                               _focusVisible={{ outline: 'none', boxShadow: 'none' }}
                               _focus={{ outline: 'none', boxShadow: 'none' }}
                             >
-                              {item.title}
+                              <RouterLink to={`/docs/${encodeURI(navPath)}`}>
+                                {item.title}
+                              </RouterLink>
                             </ChakraLink>
                           )
                         })}
@@ -264,8 +259,9 @@ const Docs = () => {
                   <ReactMarkdown
                     components={{
                       pre: ({ children }) => <>{children}</>,
-                      code: ({ className, children, inline }) => {
+                      code: ({ className, children, ...props }) => {
                         const rawCode = String(children).replace(/\n$/, '')
+                        const inline = (props as { inline?: boolean }).inline
                         const inferredInline =
                           inline ??
                           (!className || (!rawCode.includes('\n') && !rawCode.includes('\r')))
@@ -277,7 +273,7 @@ const Docs = () => {
                         return <CodeBlock code={rawCode} language={language} />
                       },
                       a: ({ children, href }) => {
-                        if (!href) return <a>{children}</a>
+                        if (!href) return <span>{children}</span>
                         if (href.startsWith('http')) {
                           return (
                             <a href={href} target="_blank" rel="noreferrer">
