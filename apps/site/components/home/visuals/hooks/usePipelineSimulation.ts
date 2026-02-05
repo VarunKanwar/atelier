@@ -95,6 +95,7 @@ export const usePipelineSimulation = () => {
       if (!isVisibleRef.current) return
       const now = Date.now()
 
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Single-pass state machine keeps timings consistent.
       setItems(prevItems => {
         const newItems: PipelineItem[] = []
         let hasChanges = false
@@ -148,6 +149,7 @@ export const usePipelineSimulation = () => {
         const inferenceHeadId = inferenceQueue[0]?.id
         const thumbHeadId = thumbQueue[0]?.id
 
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Explicit transitions preserve clarity for the demo.
         const processedItems = prevItems.map((item): PipelineItem => {
           const elapsed = now - item.enteredStageAt
 
