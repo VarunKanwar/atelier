@@ -32,7 +32,7 @@ jobs:
         run: bun install
 
       - name: Build site
-        run: bun --cwd apps/site run build
+        run: bun run --cwd apps/site build
         env:
           PUBLIC_BASE_PATH: /${{ github.event.repository.name }}/
 
