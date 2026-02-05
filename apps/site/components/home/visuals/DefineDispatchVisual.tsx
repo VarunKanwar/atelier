@@ -629,7 +629,7 @@ function MachineNode({
   return (
     <g transform={`translate(${x}, ${y})`}>
       {/* Node body + activity bars */}
-      <motion.rect
+      <rect
         x={-width / 2}
         y={-height / 2}
         width={width}
@@ -638,11 +638,9 @@ function MachineNode({
         fill={fillColor}
         stroke={COLORS.strokeBase}
         strokeWidth={strokeWidth}
-        animate={{ fill: fillColor }}
-        transition={{ duration: 0.3 }}
       />
       {loadRatio > 0 && (
-        <motion.rect
+        <rect
           x={-width / 2}
           y={-height / 2}
           width={width}
@@ -652,9 +650,8 @@ function MachineNode({
           stroke={COLORS.strokeActive}
           strokeWidth={strokeWidth}
           strokeOpacity={loadRatio}
-          animate={{ strokeOpacity: loadRatio }}
-          transition={{ duration: 0.3 }}
           pointerEvents="none"
+          style={{ transition: 'stroke-opacity 0.3s ease' }}
         />
       )}
 
@@ -666,21 +663,14 @@ function MachineNode({
             const totalWidth = maxWorkers * barWidth + (maxWorkers - 1) * barGap
             const xOffset = -totalWidth / 2 + slotIndex * (barWidth + barGap)
             return (
-              <motion.rect
+              <rect
                 key={slotIndex}
                 x={xOffset}
-                y={-6}
+                y={-5}
                 width={barWidth}
-                height={12}
+                height={10}
                 rx={2}
                 fill={COLORS.strokeActive}
-                animate={{ height: [6, 12, 7], y: [-3, -6, -4] }}
-                transition={{
-                  repeat: Infinity,
-                  duration: 0.8,
-                  delay: slotIndex * 0.1,
-                  ease: 'easeInOut',
-                }}
               />
             )
           })}

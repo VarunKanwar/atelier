@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Atelier">
+  <rect x="4" y="4" width="40" height="40" rx="10" fill="#111827" />
+  <path
+    d="M24 12 L33 36 H29 L27 30 H21 L19 36 H15 L24 12 Z M22.5 26 H25.5 L24 22 Z"
+    fill="#ffffff"
+  />
+</svg>
