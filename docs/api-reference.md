@@ -1,8 +1,5 @@
 # Atelier API Reference
 
-This reference documents the public API surface for Atelier. It is
-intentionally concise and reflects the current implementation.
-
 ## createTaskRuntime
 
 ```ts
@@ -61,7 +58,7 @@ Notes:
   (default `3`).
 - Restart policies apply a small internal backoff (100ms → 2s) between restarts.
 
-### Queue states (practical meaning)
+### Queue states
 
 - **In flight**: work is executing on a worker. It consumes worker CPU and is
   no longer just “waiting around”.

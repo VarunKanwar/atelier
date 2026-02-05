@@ -1,8 +1,8 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import SiteLayout from './components/layout/SiteLayout'
-import Docs from './Docs'
-import Home from './Home'
-import Playground from './Playground'
+import Docs from './DocsPage'
+import Home from './HomePage'
+import Playground from './PlaygroundPage'
 
 const App = () => {
   const base = import.meta.env.BASE_URL ?? '/'
@@ -13,7 +13,7 @@ const App = () => {
       <Routes>
         <Route element={<SiteLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/explore" element={<Playground />} />
+          <Route path="/playground" element={<Playground />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/docs/*" element={<Docs />} />
         </Route>

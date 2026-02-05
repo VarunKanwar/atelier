@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -n "${SKIP_PRECOMMIT:-}" ]; then
+  echo "Skipping pre-commit checks (SKIP_PRECOMMIT set)."
+  exit 0
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "bun is required for pre-commit checks. Install Bun or set SKIP_PRECOMMIT=1."
+  exit 1
+fi
+
+echo "Running lint..."
+bun run lint
+
+echo "Running format check..."
+bun run format
+
+echo "Running typecheck..."
+bun run typecheck

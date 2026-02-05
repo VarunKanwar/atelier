@@ -100,9 +100,9 @@ const TaskNode = ({ data }: NodeProps<TaskNodeType>) => {
 
   return (
     <Box
-      bg="white"
+      bg="var(--surface)"
       borderWidth="1px"
-      borderColor="gray.200"
+      borderColor="var(--border-subtle)"
       rounded="lg"
       p={4}
       minW="200px"
@@ -159,10 +159,9 @@ const TerminalNode = ({ data }: NodeProps<TerminalNodeType>) => {
   const description = data.kind === 'source' ? 'External input' : 'External output'
   return (
     <Box
-      bg="gray.50"
+      bg="var(--surface)"
       borderWidth="1px"
-      borderStyle="dashed"
-      borderColor="gray.300"
+      borderColor="var(--border-subtle)"
       rounded="lg"
       p={4}
       minW="160px"
@@ -186,7 +185,14 @@ const TerminalNode = ({ data }: NodeProps<TerminalNodeType>) => {
 }
 const QueueLabel = ({ data }: { data: QueueEdgeData }) => {
   return (
-    <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="lg" p={3} minW="160px">
+    <Box
+      bg="var(--surface)"
+      borderWidth="1px"
+      borderColor="var(--border-subtle)"
+      rounded="lg"
+      p={3}
+      minW="160px"
+    >
       <Stack gap={2}>
         <Text fontSize="xs" color="gray.500">
           {data.label}
@@ -285,7 +291,14 @@ const ExternalEdge = ({
             }}
             className="nodrag nopan"
           >
-            <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" rounded="full" px={2} py={1}>
+            <Box
+              bg="var(--surface)"
+              borderWidth="1px"
+              borderColor="var(--border-subtle)"
+              rounded="full"
+              px={2}
+              py={1}
+            >
               <Text fontSize="xs" color="gray.600">
                 {data.label}
               </Text>
@@ -421,7 +434,7 @@ const ScenarioFlowCanvas = ({ graph, snapshot }: ScenarioFlowCanvasProps) => {
   }, [initialEdges, setEdges])
 
   return (
-    <Box w="full" h="340px" borderWidth="1px" borderColor="gray.200" rounded="lg">
+    <Box w="full" h="340px">
       <ReactFlow
         nodes={nodes}
         edges={edges}

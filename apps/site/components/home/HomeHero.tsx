@@ -74,11 +74,11 @@ const InstallTabs = () => {
 
 export type HomeHeroProps = {
   docsHref: string
-  exploreHref: string
+  playgroundHref: string
   githubHref: string
 }
 
-const HomeHero = ({ docsHref, exploreHref, githubHref }: HomeHeroProps) => {
+const HomeHero = ({ docsHref, playgroundHref, githubHref }: HomeHeroProps) => {
   return (
     <Box
       maxW="var(--content-max-width)"
@@ -114,7 +114,7 @@ const HomeHero = ({ docsHref, exploreHref, githubHref }: HomeHeroProps) => {
               </a>
             </Button>
             <Link asChild fontSize="sm" color="gray.500" ml={1}>
-              <RouterLink to={exploreHref}>Explore demo</RouterLink>
+              <RouterLink to={playgroundHref}>Playground</RouterLink>
             </Link>
           </HStack>
         </Stack>

@@ -278,7 +278,7 @@ function WorkerContainer({ y, isFailing }: { y: number; isFailing: boolean }) {
       animate={isFailing ? { x: [0, -1.5, 1.5, -1, 0] } : { x: 0 }}
       transition={{ duration: FAILURE_ANIMATION_S, ease: 'easeInOut' }}
     >
-      <motion.rect
+      <rect
         x={WORKER_X - WORKER_BOX_SIZE.width / 2}
         y={y - WORKER_BOX_SIZE.height / 2}
         width={WORKER_BOX_SIZE.width}
@@ -287,11 +287,9 @@ function WorkerContainer({ y, isFailing }: { y: number; isFailing: boolean }) {
         fill="none"
         strokeDasharray="4 2"
         strokeWidth={1}
-        animate={{
-          stroke: isFailing ? COLORS.strokeFail : COLORS.strokeMuted,
-          opacity: isFailing ? 0.7 : 1,
-        }}
-        transition={{ duration: FAILURE_ANIMATION_S, ease: 'easeOut' }}
+        stroke={isFailing ? COLORS.strokeFail : COLORS.strokeMuted}
+        opacity={isFailing ? 0.7 : 1}
+        style={{ transition: 'opacity 200ms ease-out' }}
       />
     </motion.g>
   )

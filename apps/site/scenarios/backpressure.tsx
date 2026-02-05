@@ -312,7 +312,7 @@ export const backpressureScenario: ScenarioDefinition = {
   meta: {
     id: 'queue-policies',
     title: 'Queue policies',
-    summary: 'Explore queue depth and policies under backpressure.',
+    summary: 'Tune queue depth and policies under backpressure.',
   },
   Component: BackpressureScenario,
 }

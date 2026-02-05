@@ -1,7 +1,7 @@
-import { Box, Button, HStack, Text } from '@chakra-ui/react'
+import { Button, HStack, Text } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 
-export const ControlDivider = () => <Box borderTopWidth="1px" borderColor="gray.200" />
+export const ControlDivider = () => null
 
 export const ControlSectionHeader = ({
   title,

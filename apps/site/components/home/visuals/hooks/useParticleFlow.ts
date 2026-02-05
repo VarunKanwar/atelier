@@ -251,6 +251,7 @@ export function useParticleFlow() {
           lastSpawnTime.current = now
         }
 
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Dense math keeps the particle field cohesive.
         updated = updated.map(p => {
           const next = { ...p }
           const bounds = getYBounds(next.x)
