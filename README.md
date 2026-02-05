@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@varunkanwar/atelier.svg)](https://www.npmjs.com/package/@varunkanwar/atelier)
 [![npm downloads](https://img.shields.io/npm/dm/@varunkanwar/atelier.svg)](https://www.npmjs.com/package/@varunkanwar/atelier)
 [![license](https://img.shields.io/npm/l/@varunkanwar/atelier.svg)](https://github.com/VarunKanwar/atelier/blob/main/LICENSE)
+[![site](https://img.shields.io/badge/site-live-0ea5e9)](https://varunkanwar.github.io/atelier/)
 
 Atelier is a browser-only task runtime for Web Worker workloads that need
 predictable concurrency, backpressure, and cancellation without adopting a
