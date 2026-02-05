@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1]
+
+### Changed
+- Republished package with GitHub-owned Actions only; no runtime changes.
+
 ### Added
 - Zero-copy transfer support with explicit dispatch control (`transfer`,
   `transferResult`) and automatic detection.
@@ -24,5 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit and integration test suites
 - Observability demo with React dashboard
 
-[unreleased]: https://github.com/VarunKanwar/atelier/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/VarunKanwar/atelier/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/VarunKanwar/atelier/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VarunKanwar/atelier/releases/tag/v0.1.0

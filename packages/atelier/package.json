@@ -1,6 +1,6 @@
 {
   "name": "@varunkanwar/atelier",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A task runtime for browser workloads with parallelism, backpressure, and cancellation",
   "type": "module",
   "main": "./dist/index.js",
